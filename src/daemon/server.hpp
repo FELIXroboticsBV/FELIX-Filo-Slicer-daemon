@@ -13,10 +13,10 @@
 
   Class responsible for creating server and sockets
 */
+#pragma once
 
-#ifndef FILO_SLICER_DAEMON_SERVER_HPP
-#define FILO_SLICER_DAEMON_SERVER_HPP
-
+#include "config.hpp"
+#include <boost/filesystem/path.hpp>
 #include <sys/socket.h>
 #include <sys/un.h>
 
@@ -26,11 +26,22 @@ class server
 {
 public:
     server();
+
+    template<typename T> void start(T& payload) { listen(_server_fd, cfg.max_pending_connections); }
+
     ~server();
 
 private:
+    bool createSocket();
+    bool bindSocket();
+
+private:
+    struct sockaddr_un _addr;
+    // socket file descriptor
+    unsigned int _server_fd;
+
+    // path to the socket file
+    boost::filesystem::path _socketPath;
 };
 
 } // namespace felix_daemon
-
-#endif // LEPROSY_SERVER_HPP

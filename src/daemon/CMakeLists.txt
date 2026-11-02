@@ -8,6 +8,8 @@ add_executable(orca-daemon ${ORCA_DAEMON_SOURCES}
  server.hpp
  server.cpp
  paths.hpp
+ config.hpp
+ config.cpp
  )
  
 target_compile_features(orca-daemon PRIVATE cxx_std_17)

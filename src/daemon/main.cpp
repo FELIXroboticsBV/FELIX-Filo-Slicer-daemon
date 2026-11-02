@@ -6,6 +6,7 @@
 // See the LICENSE file in the repository root for details.
 
 #include <iostream>
+#include "config.hpp"
 #include "libslic3r/Utils.hpp"
 #include <boost/log/utility/setup/console.hpp>
 #include "server.hpp"
@@ -18,6 +19,9 @@ int main()
     Slic3r::set_data_dir(logDir.string());
     Slic3r::set_log_path_and_level("orca-daemon.log", 3);
     boost::log::add_console_log(std::clog, boost::log::keywords::auto_flush = true);
+
+    // load the config
+    felix_daemon::cfg.load(felix_daemon::config_path().string());
 
     // create server
     felix_daemon::server server;
