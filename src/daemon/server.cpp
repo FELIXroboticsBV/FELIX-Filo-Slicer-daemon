@@ -20,8 +20,6 @@ server::server() : _socketPath(socket_path())
 
     _server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
-    BOOST_LOG_TRIVIAL(info) << "Created socket with number " << _server_fd;
-
     if (!createSocket()) {
         BOOST_LOG_TRIVIAL(error) << "Failed to set address of the socket because the address is too long !";
     }
@@ -29,6 +27,8 @@ server::server() : _socketPath(socket_path())
     if (!bindSocket()) {
         BOOST_LOG_TRIVIAL(error) << "Failed to bind socket !";
     }
+
+    BOOST_LOG_TRIVIAL(info) << "Server initialized \n \t path to the socket: " << _socketPath.string();
 }
 
 bool server::createSocket()

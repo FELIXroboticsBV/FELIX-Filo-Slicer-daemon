@@ -22,17 +22,21 @@
 namespace felix_daemon {
 
 /**
- * Platform-standard per-user data directory, resolved at runtime:
+ * Platform-standard per-user data directory, where this program can write into
  *   Linux:   $XDG_CONFIG_HOME/FELIX/orca-daemon  (default ~/.config/FELIX/orca-daemon)
  *   Windows: %APPDATA%\FELIX\orca-daemon
  *   macOS:   ~/Library/Application Support/FELIX/orca-daemon
- *
+ * During debug build this will be index
  * @return {boost::filesystem::path}  :
  */
 inline boost::filesystem::path default_data_directory()
 {
     namespace fs       = boost::filesystem;
-    const fs::path app = fs::path("FELIX") / "orca-daemon";
+    const fs::path app = fs::path("FELIX") / cfg.socketName;
+
+#if defined(DEBUG)
+    return fs::path("./src/daemon");
+#endif
 
 #if defined(_WIN32)
     // Wide version so user names with non-ASCII characters work.
