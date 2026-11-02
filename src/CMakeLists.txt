@@ -13,6 +13,12 @@ find_package(libnoise REQUIRED)
 
 add_subdirectory(libslic3r)
 
+if (ORCA_DAEMON)
+    message("-- Adding daemon")
+    add_subdirectory(daemon)
+endif ()
+
+
 if (SLIC3R_GUI)
     add_subdirectory(glad)
     # imgui, imguizmo, and hidapi are now included from deps_src
