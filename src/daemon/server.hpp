@@ -16,6 +16,7 @@
 #pragma once
 
 #include "config.hpp"
+#include "connection_handler.hpp"
 #include <boost/filesystem/path.hpp>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -25,9 +26,9 @@ namespace felix_daemon {
 class server
 {
 public:
-    server();
+    server(connection_handler handler);
 
-    template<typename T> void start(T& payload) { listen(_server_fd, cfg.max_pending_connections); }
+    void start();
 
     ~server();
 
@@ -37,11 +38,17 @@ private:
 
 private:
     struct sockaddr_un _addr;
+
     // socket file descriptor
     unsigned int _server_fd;
 
     // path to the socket file
     boost::filesystem::path _socketPath;
+
+    connection_handler _handler;
+
+    bool _ready = false;
+    std::atomic<bool> _running{false};
 };
 
 } // namespace felix_daemon
