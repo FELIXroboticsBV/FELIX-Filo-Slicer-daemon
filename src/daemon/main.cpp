@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include "config.hpp"
+#include "data_interpreter.hpp"
 #include "libslic3r/Utils.hpp"
 #include <boost/log/utility/setup/console.hpp>
 #include "server.hpp"
@@ -23,8 +24,12 @@ int main()
     // load the config
     felix_daemon::cfg.load(felix_daemon::config_path().string());
 
+    // data transfer
+    felix_daemon::data_interpreter handler;
+
     // create server
-    felix_daemon::server server;
+    felix_daemon::server server([&handler](int client_fd) { return handler(client_fd); });
+    server.start();
 
     return 0;
 }

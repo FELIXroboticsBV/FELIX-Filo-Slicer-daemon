@@ -10,6 +10,9 @@ add_executable(orca-daemon ${ORCA_DAEMON_SOURCES}
  paths.hpp
  config.hpp
  config.cpp
+ connection_handler.hpp
+ data_interpreter.hpp
+ data_interpreter.cpp
  )
  
 target_compile_features(orca-daemon PRIVATE cxx_std_17)
