@@ -1,7 +1,10 @@
-[info]	2026-11-02 16:47:12.609920[Thread 0x00007ffff7ca49c0]:Staring up daemon`s server
-[info]	2026-11-02 16:47:12.610309[Thread 0x00007ffff7ca49c0]:Server initialized 
+[info]	2026-11-02 17:05:35.780082[Thread 0x00007ffff7ca49c0]:Staring up daemon`s server
+[info]	2026-11-02 17:05:35.780715[Thread 0x00007ffff7ca49c0]:Server initialized 
  	 listening on socket: /run/user/1000/felix-orca-daemon.sock
-[info]	2026-11-02 16:47:50.668824[Thread 0x00007ffff7ca49c0]:Client connected
-[info]	2026-11-02 16:47:59.199395[Thread 0x00007ffff7ca49c0]:Client disconnected
-[info]	2026-11-02 16:48:06.398681[Thread 0x00007ffff7ca49c0]:Client connected
-[info]	2026-11-02 16:48:47.606802[Thread 0x00007ffff7ca49c0]:Client disconnected
+[info]	2026-11-02 17:06:14.147933[Thread 0x00007ffff7ca49c0]:Client connected
+[info]	2026-11-02 17:06:17.603078[Thread 0x00007ffff7ca49c0]:Received: hello
+[info]	2026-11-02 17:06:21.651114[Thread 0x00007ffff7ca49c0]:Received: shutdown
+[info]	2026-11-02 17:06:21.651290[Thread 0x00007ffff7ca49c0]:Client disconnected
+[info]	2026-11-02 17:06:21.651332[Thread 0x00007ffff7ca49c0]:Shutdown requested by handler
+[info]	2026-11-02 17:06:21.651370[Thread 0x00007ffff7ca49c0]:Server loop stopped
+[info]	2026-11-02 17:06:21.651481[Thread 0x00007ffff7ca49c0]:Shuting down daemon`s server

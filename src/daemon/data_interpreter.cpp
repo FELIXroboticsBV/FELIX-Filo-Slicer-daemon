@@ -11,9 +11,10 @@ HandlerResult data_interpreter::operator()(int client_fd)
 
     while (true) {
         ssize_t n = read(client_fd, buf, sizeof(buf));
-        if (n == 0)
+        if (n == 0) {
             BOOST_LOG_TRIVIAL(warning) << "Client have closed the connection ";
-        break;
+            break;
+        }
         if (n < 0) {
             // EINTR here means SIGINT/SIGTERM arrived: return and let the server decide.
             if (errno != EINTR)
