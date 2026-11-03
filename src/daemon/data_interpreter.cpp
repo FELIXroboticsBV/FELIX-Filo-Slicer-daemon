@@ -82,10 +82,6 @@ bool data_interpreter::handleMessage(int client_fd, const std::string& msg)
 
     process_request(client_fd, msg);
 
-    server_response response{1, next_action::KeepRuning, response_code::OK};
-
-    send_all(client_fd, response.stringify());
-
     return false;
 }
 
@@ -95,16 +91,25 @@ void data_interpreter::process_request(int client_fd, const std::string& msg)
     try {
         src = json::parse(msg);
     } catch (const json::parse_error& e) {
-        send_all(client_fd, error(e.what()).stringify());
+        send_all(client_fd, error(-1, e.what()).stringify());
     }
 
     int id = (src.contains("id") && src["id"].is_number_integer()) ? src["id"].get<int>() : 0;
     try {
         request req(src);
-        // look up req.cmd in m_commands and call the handler
+        if (req.cmd == "status") {
+            nlohmann::json j;
+            j["status"] = "complete !";
+            server_response response{id, next_action::KeepRuning, response_code::OK, j};
+            send_all(client_fd, response.stringify());
+        }
+        if (req.cmd == "err") {
+            send_all(client_fd, error(id, "Test error").stringify());
+        }
+        // TODO: here call the handle from the registered commands
 
     } catch (const std::exception& e) {
-        send_all(client_fd, error(e.what()).stringify());
+        send_all(client_fd, error(id, e.what()).stringify());
     }
 }
 
@@ -142,11 +147,11 @@ bool data_interpreter::wasReadSuccessful(size_t n)
     return true;
 }
 
-server_response data_interpreter::error(const std::string& what)
+server_response data_interpreter::error(int id, const std::string& what)
 {
     nlohmann::json resp;
     resp["what"] = what;
-    return {-1, next_action::KeepRuning, response_code::SERVER_ERROR, resp};
+    return {id, next_action::KeepRuning, response_code::SERVER_ERROR, resp, what};
 }
 
 } // namespace felix_daemon

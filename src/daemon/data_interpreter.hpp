@@ -37,7 +37,7 @@ private:
 
     void process_request(int clinet_fd, const std::string& msg);
 
-    server_response error(const std::string& what);
+    server_response error(int id, const std::string& what);
 
 private:
     std::unordered_map<std::string, command> m_commands;

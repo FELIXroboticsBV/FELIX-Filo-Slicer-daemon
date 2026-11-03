@@ -1,12 +1,22 @@
-[info]	2026-11-03 11:07:02.896550[Thread 0x00007ffff7ca49c0]:Staring up daemon`s server
-[info]	2026-11-03 11:07:02.897009[Thread 0x00007ffff7ca49c0]:Server initialized 
+[info]	2026-11-03 11:34:25.706660[Thread 0x00007ffff7ca49c0]:Staring up daemon`s server
+[info]	2026-11-03 11:34:25.707103[Thread 0x00007ffff7ca49c0]:Server initialized 
  	 listening on socket: /run/user/1000/felix-orca-daemon.sock
-[info]	2026-11-03 11:07:04.471723[Thread 0x00007ffff7ca49c0]:Client connected
-[info]	2026-11-03 11:07:07.138764[Thread 0x00007ffff7ca49c0]:Received: {"id":1,"cmd":"status"}
-[info]	2026-11-03 11:07:17.988771[Thread 0x00007ffff7ca49c0]:Received: {"id":2,"cmd":"status"}
-[warning]	2026-11-03 11:07:37.969437[Thread 0x00007ffff7ca49c0]:Client have closed the connection 
-[info]	2026-11-03 11:07:37.969595[Thread 0x00007ffff7ca49c0]:Received: 
-[error]	2026-11-03 11:07:37.969946[Thread 0x00007ffff7ca49c0]:Failed to response to the user
-[error]	2026-11-03 11:07:37.970040[Thread 0x00007ffff7ca49c0]:Failed to response to the user
-[error]	2026-11-03 11:07:37.970098[Thread 0x00007ffff7ca49c0]:Failed to response to the user
-[info]	2026-11-03 11:07:37.970182[Thread 0x00007ffff7ca49c0]:Client disconnected
+[info]	2026-11-03 11:34:27.681500[Thread 0x00007ffff7ca49c0]:Client connected
+[info]	2026-11-03 11:34:30.911048[Thread 0x00007ffff7ca49c0]:Received: {"id":1,"cmd":"err"}
+[info]	2026-11-03 11:34:41.577607[Thread 0x00007ffff7ca49c0]:Received: {"id":2,"cmd":"status"}
+[info]	2026-11-03 11:34:56.461571[Thread 0x00007ffff7ca49c0]:Received: {"id":3,"cmd":"err"}
+[info]	2026-11-03 11:34:57.397167[Thread 0x00007ffff7ca49c0]:Received: {"id":4,"cmd":"err"}
+[info]	2026-11-03 11:34:58.167413[Thread 0x00007ffff7ca49c0]:Received: {"id":5,"cmd":"err"}
+[info]	2026-11-03 11:34:58.946657[Thread 0x00007ffff7ca49c0]:Received: {"id":6,"cmd":"err"}
+[warning]	2026-11-03 11:34:59.691391[Thread 0x00007ffff7ca49c0]:Client have closed the connection 
+[info]	2026-11-03 11:34:59.691544[Thread 0x00007ffff7ca49c0]:Received: 
+[error]	2026-11-03 11:34:59.691912[Thread 0x00007ffff7ca49c0]:Failed to response to the user
+[error]	2026-11-03 11:34:59.692058[Thread 0x00007ffff7ca49c0]:Failed to response to the user
+[info]	2026-11-03 11:34:59.692158[Thread 0x00007ffff7ca49c0]:Client disconnected
+[info]	2026-11-03 11:35:07.635779[Thread 0x00007ffff7ca49c0]:Client connected
+[info]	2026-11-03 11:35:09.674187[Thread 0x00007ffff7ca49c0]:Received: {"id":1,"cmd":"err"}
+[warning]	2026-11-03 11:35:11.021179[Thread 0x00007ffff7ca49c0]:Client have closed the connection 
+[info]	2026-11-03 11:35:11.021317[Thread 0x00007ffff7ca49c0]:Received: 
+[error]	2026-11-03 11:35:11.021515[Thread 0x00007ffff7ca49c0]:Failed to response to the user
+[error]	2026-11-03 11:35:11.021613[Thread 0x00007ffff7ca49c0]:Failed to response to the user
+[info]	2026-11-03 11:35:11.021682[Thread 0x00007ffff7ca49c0]:Client disconnected
