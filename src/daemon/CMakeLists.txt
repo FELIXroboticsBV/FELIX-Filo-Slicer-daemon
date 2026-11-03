@@ -22,8 +22,17 @@ add_executable(orca-daemon ${ORCA_DAEMON_SOURCES}
  utils/create_profiles_directories.hpp
  utils/create_profiles_directories.cpp
  )
+
+
  
 target_compile_features(orca-daemon PRIVATE cxx_std_17)
+
+if (ORCA_DAEMON)
+    target_compile_definitions(orca-daemon PRIVATE
+    $<$<CONFIG:Debug>:ORCA_RESOURCES_DIR="${CMAKE_SOURCE_DIR}/resources">
+    $<$<CONFIG:Debug>:ORCA_DAEMON_DATA_DIR="${CMAKE_BINARY_DIR}/daemon-data">
+)
+endif ()
  
 target_include_directories(orca-daemon PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
