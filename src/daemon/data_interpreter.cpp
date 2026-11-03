@@ -1,25 +1,52 @@
 #include "data_interpreter.hpp"
-#include "connection_handler.hpp"
-#include "server.hpp"
 #include "boost/log/trivial.hpp"
+#include "orca_session.hpp"
+#include <json_fwd.hpp>
+#include <sys/socket.h>
 
 namespace felix_daemon {
-HandlerResult data_interpreter::operator()(int client_fd)
+
+struct request
 {
+    int id = 0;
+    std::string cmd;
+    json params = json::object();
+
+    explicit request(const json& src)
+    {
+        if (auto it = src.find("id"); it != src.end() && it->is_number_integer())
+            id = it->get<int>();
+
+        auto c = src.find("cmd");
+
+        if (c == src.end() || !c->is_string() || c->get<std::string>().empty())
+            throw std::invalid_argument("missing or invalid 'cmd'");
+        cmd = c->get<std::string>();
+
+        if (auto p = src.find("params"); p != src.end() && !p->is_null()) {
+            if (!p->is_object())
+                throw std::invalid_argument("'params' must be an object");
+            params = *p;
+        }
+    }
+};
+
+data_interpreter::data_interpreter(orca_session& orca_session)
+{
+    m_commands.emplace("load_model", [s = &orca_session](const json& p) { return s->cmd_load_model(p); });
+}
+next_action data_interpreter::operator()(int client_fd)
+{
+    server_response response;
+    // data that will arrive at the server
     std::string pending;
     char buf[4096];
 
     while (true) {
+        // read the data tha thave arived at the server
         ssize_t n = read(client_fd, buf, sizeof(buf));
-        if (n == 0) {
-            BOOST_LOG_TRIVIAL(warning) << "Client have closed the connection ";
+        if (!was_read_successful(n)) {
             break;
-        }
-        if (n < 0) {
-            // EINTR here means SIGINT/SIGTERM arrived: return and let the server decide.
-            if (errno != EINTR)
-                BOOST_LOG_TRIVIAL(error) << "read() failed: " << std::strerror(errno);
-            return HandlerResult::KeepRuning;
         }
 
         pending.append(buf, static_cast<size_t>(n));
@@ -31,29 +58,106 @@ HandlerResult data_interpreter::operator()(int client_fd)
             if (!line.empty() && line.back() == '\r')
                 line.pop_back();
 
-            if (handleMessage(client_fd, line))
-                return HandlerResult::Shutdown;
+            if (handle_message(client_fd, line)) {
+                return next_action::shutdown;
+            }
         }
     }
 
-    if (!pending.empty() && handleMessage(client_fd, pending))
-        return HandlerResult::Shutdown;
+    auto shouldClose = handle_message(client_fd, pending);
+    if (!pending.empty() && shouldClose)
+        return next_action::shutdown;
 
-    return HandlerResult::KeepRuning;
+    return next_action::keep_running;
 }
 
-bool data_interpreter::handleMessage(int client_fd, const std::string& msg)
+bool data_interpreter::handle_message(int client_fd, const std::string& msg)
 {
     BOOST_LOG_TRIVIAL(info) << "Received: " << msg;
 
     if (msg == "shutdown") {
-        write(client_fd, "bye\n", 4);
         return true;
     }
 
-    // g-code will go here
-    write(client_fd, "ok\n", 3);
+    process_request(client_fd, msg);
+
     return false;
+}
+
+void data_interpreter::process_request(int client_fd, const std::string& msg)
+{
+    json src;
+    try {
+        src = json::parse(msg);
+    } catch (const json::parse_error& e) {
+        safe_send(client_fd, error(-1, e.what()).stringify());
+    }
+
+    int id = (src.contains("id") && src["id"].is_number_integer()) ? src["id"].get<int>() : 0;
+    try {
+        request req(src);
+
+        auto response = m_commands.find(req.cmd)->second(req.params);
+
+        if (response.failed) {
+            safe_send(client_fd, error(id, response.message).stringify());
+        } else {
+            auto body = response.json.value_or({});
+            safe_send(client_fd, success(id, "Command success full !", body).stringify());
+        }
+
+        // TODO: here call the handle from the registered commands
+
+    } catch (const std::exception& e) {
+        safe_send(client_fd, error(id, e.what()).stringify());
+    }
+}
+
+void data_interpreter::safe_send(int client_fd, const std::string& msg)
+{
+    const char* p = msg.data();
+    size_t left   = msg.size();
+    while (left > 0) {
+        ssize_t n = send(client_fd, p, left, MSG_NOSIGNAL);
+        if (n < 0) {
+            if (errno == EINTR) {
+                continue;
+            } else {
+                BOOST_LOG_TRIVIAL(error) << "Failed to response to the user";
+                return;
+            }
+        }
+        p += n;
+        left -= static_cast<size_t>(n);
+    }
+}
+
+bool data_interpreter::was_read_successful(size_t n)
+{
+    if (n == 0) {
+        BOOST_LOG_TRIVIAL(warning) << "Client have closed the connection ";
+        return false;
+    }
+    if (n < 0) {
+        // EINTR here means SIGINT/SIGTERM arrived: return and let the server decide.
+        if (errno != EINTR)
+            BOOST_LOG_TRIVIAL(error) << "read() failed: " << std::strerror(errno);
+        return true;
+    }
+    return true;
+}
+
+server_response data_interpreter::error(int id, const std::string& what)
+{
+    nlohmann::json resp;
+    resp["what"] = what;
+    return {id, next_action::keep_running, response_code::server_error, resp, what};
+}
+
+server_response data_interpreter::success(int id, const std::string& msg, json& body)
+{
+    BOOST_LOG_TRIVIAL(info) << "Processed request \n \t end message: " << msg;
+    return {id, next_action::keep_running, response_code::ok, body};
 }
 
 } // namespace felix_daemon

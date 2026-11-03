@@ -10,9 +10,13 @@ add_executable(orca-daemon ${ORCA_DAEMON_SOURCES}
  paths.hpp
  config.hpp
  config.cpp
- connection_handler.hpp
+ response.hpp
  data_interpreter.hpp
  data_interpreter.cpp
+ orca_session.hpp
+ orca_response.hpp
+ orca_session.cpp
+ nanosvg_impl.cpp
  )
  
 target_compile_features(orca-daemon PRIVATE cxx_std_17)

@@ -6,7 +6,7 @@
 // See the LICENSE file in the repository root for details.
 
 #include "server.hpp"
-#include "connection_handler.hpp"
+#include "response.hpp"
 #include "paths.hpp"
 
 #include <boost/log/trivial.hpp>
@@ -48,7 +48,7 @@ void installSignalHandlers()
 
 //============================================================================
 // Server implementation
-server::server(connection_handler handler) : _socketPath(socket_path()), _handler(handler)
+server::server(response_trigger handler) : _socketPath(socket_path()), _handler(handler)
 {
     BOOST_LOG_TRIVIAL(info) << "Staring up daemon`s server";
 
@@ -98,7 +98,7 @@ void server::start()
         close(client_fd);
         BOOST_LOG_TRIVIAL(info) << "Client disconnected";
 
-        if (result == HandlerResult::Shutdown) {
+        if (result == next_action::shutdown) {
             BOOST_LOG_TRIVIAL(info) << "Shutdown requested by handler";
             _running = false;
         }

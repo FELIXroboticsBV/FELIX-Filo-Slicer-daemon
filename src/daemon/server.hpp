@@ -16,27 +16,49 @@
 #pragma once
 
 #include "config.hpp"
-#include "connection_handler.hpp"
+#include "response.hpp"
 #include <boost/filesystem/path.hpp>
 #include <sys/socket.h>
 #include <sys/un.h>
 
 namespace felix_daemon {
 
+/**
+ * Server class is responsible for creating connection on the local UNIX sonet
+ * Responses are handled, processed and send to the in the data_interpreter.hpp
+ */
 class server
 {
 public:
-    server(connection_handler handler);
+    /**
+     * server constructor
+     *
+     * @param  {response_trigger} handler : callback function for this server instance to use
+     */
+    server(response_trigger handler);
 
+    /**
+     * Starts up the server
+     */
     void start();
 
     ~server();
 
 private:
+    /**
+     * uses socket() syscall to crate local socet
+     * @return {bool}  : true if the socket was correctly created false otherwise
+     */
     bool createSocket();
+
+    /**
+     * Uses bind() / unbind() syscalls to unbind the socket to the kernel and thus make it available
+     * @return {bool}  :
+     */
     bool bindSocket();
 
 private:
+    // address of the local socket
     struct sockaddr_un _addr;
 
     // socket file descriptor
@@ -45,7 +67,7 @@ private:
     // path to the socket file
     boost::filesystem::path _socketPath;
 
-    connection_handler _handler;
+    response_trigger _handler;
 
     bool _ready = false;
     std::atomic<bool> _running{false};
