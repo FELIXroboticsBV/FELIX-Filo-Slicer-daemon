@@ -9,6 +9,7 @@
 
 #include <string>
 namespace felix_daemon {
+
 struct daemon_config
 {
     std::string socketName      = "felix-daemon";
@@ -20,5 +21,8 @@ private:
     bool loaded = false;
 };
 
+/**
+    Global variable that contains parsed information of the config.ini
+*/
 inline daemon_config cfg;
 } // namespace felix_daemon

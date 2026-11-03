@@ -12,20 +12,20 @@
 
 namespace felix_daemon {
 
-enum class next_action { KeepRuning, Shutdown };
+enum class next_action { keep_running, shutdown };
 
 enum class response_code {
-    OK           = 200,
-    NOT_FOUND    = 404,
-    USER_ERROR   = 400,
-    SERVER_ERROR = 500
+    ok           = 200,
+    not_found    = 404,
+    user_error   = 400,
+    server_error = 500
 
 };
 
 struct server_response
 {
     int id                 = 0;
-    next_action nextAction = next_action::KeepRuning;
+    next_action nextAction = next_action::keep_running;
     response_code code;
     nlohmann::json body = nlohmann::json::object();
     std::string error;
@@ -40,5 +40,9 @@ struct server_response
         return j.dump() + "\n";
     }
 };
-using connection_handler = std::function<next_action(int client_fd)>;
+
+/**
+    Definition of the callback function that creates and sends response
+*/
+using response_trigger = std::function<next_action(int client_fd)>;
 } // namespace felix_daemon

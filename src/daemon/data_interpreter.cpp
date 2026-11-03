@@ -1,8 +1,8 @@
 #include "data_interpreter.hpp"
-#include "connection_handler.hpp"
-#include "server.hpp"
 #include "boost/log/trivial.hpp"
+#include "orca_session.hpp"
 #include <json_fwd.hpp>
+#include <sys/socket.h>
 
 namespace felix_daemon {
 
@@ -31,11 +31,10 @@ struct request
     }
 };
 
-data_interpreter::data_interpreter()
-{ // register the commands
-  // m_commands.emplace("status", [this](int client_fd, const json& params) { return cmd })
+data_interpreter::data_interpreter(orca_session& orca_session)
+{
+    m_commands.emplace("load_model", [s = &orca_session](const json& p) { return s->cmd_load_model(p); });
 }
-
 next_action data_interpreter::operator()(int client_fd)
 {
     server_response response;
@@ -46,7 +45,7 @@ next_action data_interpreter::operator()(int client_fd)
     while (true) {
         // read the data tha thave arived at the server
         ssize_t n = read(client_fd, buf, sizeof(buf));
-        if (!wasReadSuccessful(n)) {
+        if (!was_read_successful(n)) {
             break;
         }
 
@@ -59,20 +58,20 @@ next_action data_interpreter::operator()(int client_fd)
             if (!line.empty() && line.back() == '\r')
                 line.pop_back();
 
-            if (handleMessage(client_fd, line)) {
-                return next_action::Shutdown;
+            if (handle_message(client_fd, line)) {
+                return next_action::shutdown;
             }
         }
     }
 
-    auto shouldClose = handleMessage(client_fd, pending);
+    auto shouldClose = handle_message(client_fd, pending);
     if (!pending.empty() && shouldClose)
-        return next_action::Shutdown;
+        return next_action::shutdown;
 
-    return next_action::KeepRuning;
+    return next_action::keep_running;
 }
 
-bool data_interpreter::handleMessage(int client_fd, const std::string& msg)
+bool data_interpreter::handle_message(int client_fd, const std::string& msg)
 {
     BOOST_LOG_TRIVIAL(info) << "Received: " << msg;
 
@@ -91,29 +90,30 @@ void data_interpreter::process_request(int client_fd, const std::string& msg)
     try {
         src = json::parse(msg);
     } catch (const json::parse_error& e) {
-        send_all(client_fd, error(-1, e.what()).stringify());
+        safe_send(client_fd, error(-1, e.what()).stringify());
     }
 
     int id = (src.contains("id") && src["id"].is_number_integer()) ? src["id"].get<int>() : 0;
     try {
         request req(src);
-        if (req.cmd == "status") {
-            nlohmann::json j;
-            j["status"] = "complete !";
-            server_response response{id, next_action::KeepRuning, response_code::OK, j};
-            send_all(client_fd, response.stringify());
+
+        auto response = m_commands.find(req.cmd)->second(req.params);
+
+        if (response.failed) {
+            safe_send(client_fd, error(id, response.message).stringify());
+        } else {
+            auto body = response.json.value_or({});
+            safe_send(client_fd, success(id, "Command success full !", body).stringify());
         }
-        if (req.cmd == "err") {
-            send_all(client_fd, error(id, "Test error").stringify());
-        }
+
         // TODO: here call the handle from the registered commands
 
     } catch (const std::exception& e) {
-        send_all(client_fd, error(id, e.what()).stringify());
+        safe_send(client_fd, error(id, e.what()).stringify());
     }
 }
 
-void data_interpreter::send_all(int client_fd, const std::string& msg)
+void data_interpreter::safe_send(int client_fd, const std::string& msg)
 {
     const char* p = msg.data();
     size_t left   = msg.size();
@@ -132,7 +132,7 @@ void data_interpreter::send_all(int client_fd, const std::string& msg)
     }
 }
 
-bool data_interpreter::wasReadSuccessful(size_t n)
+bool data_interpreter::was_read_successful(size_t n)
 {
     if (n == 0) {
         BOOST_LOG_TRIVIAL(warning) << "Client have closed the connection ";
@@ -151,7 +151,13 @@ server_response data_interpreter::error(int id, const std::string& what)
 {
     nlohmann::json resp;
     resp["what"] = what;
-    return {id, next_action::KeepRuning, response_code::SERVER_ERROR, resp, what};
+    return {id, next_action::keep_running, response_code::server_error, resp, what};
+}
+
+server_response data_interpreter::success(int id, const std::string& msg, json& body)
+{
+    BOOST_LOG_TRIVIAL(info) << "Processed request \n \t end message: " << msg;
+    return {id, next_action::keep_running, response_code::ok, body};
 }
 
 } // namespace felix_daemon

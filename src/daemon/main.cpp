@@ -10,6 +10,7 @@
 #include "data_interpreter.hpp"
 #include "libslic3r/Utils.hpp"
 #include <boost/log/utility/setup/console.hpp>
+#include "orca_session.hpp"
 #include "server.hpp"
 #include "paths.hpp"
 
@@ -24,8 +25,10 @@ int main()
     // load the config
     felix_daemon::cfg.load(felix_daemon::config_path().string());
 
+    // create orca session
+    felix_daemon::orca_session orca_session;
     // data transfer
-    felix_daemon::data_interpreter handler;
+    felix_daemon::data_interpreter handler(orca_session);
 
     // create server
     felix_daemon::server server([&handler](int client_fd) { return handler(client_fd); });
