@@ -98,7 +98,7 @@ void server::start()
         close(client_fd);
         BOOST_LOG_TRIVIAL(info) << "Client disconnected";
 
-        if (result == HandlerResult::Shutdown) {
+        if (result == next_action::Shutdown) {
             BOOST_LOG_TRIVIAL(info) << "Shutdown requested by handler";
             _running = false;
         }

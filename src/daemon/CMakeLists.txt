@@ -13,6 +13,7 @@ add_executable(orca-daemon ${ORCA_DAEMON_SOURCES}
  connection_handler.hpp
  data_interpreter.hpp
  data_interpreter.cpp
+ orca_session.hpp
  )
  
 target_compile_features(orca-daemon PRIVATE cxx_std_17)

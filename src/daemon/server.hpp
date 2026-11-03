@@ -36,6 +36,8 @@ private:
     bool createSocket();
     bool bindSocket();
 
+    bool send_all(int df, const std::string& msg);
+
 private:
     struct sockaddr_un _addr;
 
