@@ -1,3 +1,10 @@
+// Copyright (c) 2026 FELIX Robotics BV
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of the FELIX fork of OrcaSlicer.
+// Licensed under the GNU Affero General Public License v3.0 or later.
+// See the LICENSE file in the repository root for details.
+
 #include "data_interpreter.hpp"
 #include "boost/log/trivial.hpp"
 #include "orca_session.hpp"
@@ -34,6 +41,7 @@ struct request
 data_interpreter::data_interpreter(orca_session& orca_session)
 {
     m_commands.emplace("load_model", [s = &orca_session](const json& p) { return s->cmd_load_model(p); });
+    m_commands.emplace("set_printer", [s = &orca_session](const json& p) { return s->cmd_set_printer(p); });
 }
 next_action data_interpreter::operator()(int client_fd)
 {
@@ -105,8 +113,6 @@ void data_interpreter::process_request(int client_fd, const std::string& msg)
             auto body = response.json.value_or({});
             safe_send(client_fd, success(id, "Command success full !", body).stringify());
         }
-
-        // TODO: here call the handle from the registered commands
 
     } catch (const std::exception& e) {
         safe_send(client_fd, error(id, e.what()).stringify());

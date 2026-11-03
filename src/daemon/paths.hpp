@@ -16,6 +16,7 @@
 #pragma once
 
 #include "config.hpp"
+#include <boost/dll/runtime_symbol_info.hpp>
 #include <cstdlib>
 #include <boost/filesystem.hpp>
 
@@ -72,6 +73,37 @@ inline boost::filesystem::path config_path()
         felix_daemon::daemon_config{}.save(file.string());
     }
     return file;
+}
+
+/**
+ * Orca's read-only resources folder (profiles, shaders, images, ...)
+ *   Debug:   <orca repo>/resources, from CMake (ORCA_RESOURCES_DIR)
+ *   Windows: <exe dir>/resources
+ *   macOS:   <exe dir>/../Resources
+ *   Linux:   <exe dir>/../resources
+ * @return {boost::filesystem::path}  : path to the resources folder
+ */
+inline boost::filesystem::path resources_directory()
+{
+    namespace fs = boost::filesystem;
+
+#if defined(ORCA_RESOURCES_DIR)
+    fs::path dir = ORCA_RESOURCES_DIR;
+#else
+    const fs::path exeDir = boost::dll::program_location().parent_path();
+#if defined(_WIN32)
+    fs::path dir = exeDir / "resources";
+#elif defined(__APPLE__)
+    fs::path dir = exeDir / ".." / "Resources";
+#else
+    fs::path dir = exeDir / ".." / "resources";
+#endif
+#endif
+
+    dir = fs::weakly_canonical(dir);
+    if (!fs::exists(dir / "profiles"))
+        throw std::runtime_error("orca resources not found: " + dir.string());
+    return dir;
 }
 
 /**

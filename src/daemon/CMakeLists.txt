@@ -17,6 +17,10 @@ add_executable(orca-daemon ${ORCA_DAEMON_SOURCES}
  orca_response.hpp
  orca_session.cpp
  nanosvg_impl.cpp
+ utils/build_printer_preset_string.hpp
+ utils/build_printer_preset_string.cpp
+ utils/create_profiles_directories.hpp
+ utils/create_profiles_directories.cpp
  )
  
 target_compile_features(orca-daemon PRIVATE cxx_std_17)
