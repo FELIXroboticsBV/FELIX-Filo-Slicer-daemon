@@ -33,7 +33,11 @@ public:
 private:
     bool wasReadSuccessful(size_t n);
     bool handleMessage(int client_fd, const std::string& msg);
-    bool send_all(int clinet_fd, const std::string& msg);
+    void send_all(int clinet_fd, const std::string& msg);
+
+    void process_request(int clinet_fd, const std::string& msg);
+
+    server_response error(const std::string& what);
 
 private:
     std::unordered_map<std::string, command> m_commands;

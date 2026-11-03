@@ -27,14 +27,14 @@ struct server_response
     int id                 = 0;
     next_action nextAction = next_action::KeepRuning;
     response_code code;
-    nlohmann::json data = nlohmann::json::object();
+    nlohmann::json body = nlohmann::json::object();
     std::string error;
 
     std::string stringify() const
     {
         nlohmann::json j = {{"id", id}, {"code", static_cast<int>(code)}};
         if (error.empty())
-            j["data"] = data;
+            j["data"] = body;
         else
             j["error"] = error;
         return j.dump() + "\n";

@@ -6,6 +6,31 @@
 
 namespace felix_daemon {
 
+struct request
+{
+    int id = 0;
+    std::string cmd;
+    json params = json::object();
+
+    explicit request(const json& src)
+    {
+        if (auto it = src.find("id"); it != src.end() && it->is_number_integer())
+            id = it->get<int>();
+
+        auto c = src.find("cmd");
+
+        if (c == src.end() || !c->is_string() || c->get<std::string>().empty())
+            throw std::invalid_argument("missing or invalid 'cmd'");
+        cmd = c->get<std::string>();
+
+        if (auto p = src.find("params"); p != src.end() && !p->is_null()) {
+            if (!p->is_object())
+                throw std::invalid_argument("'params' must be an object");
+            params = *p;
+        }
+    }
+};
+
 data_interpreter::data_interpreter()
 { // register the commands
   // m_commands.emplace("status", [this](int client_fd, const json& params) { return cmd })
@@ -40,27 +65,11 @@ next_action data_interpreter::operator()(int client_fd)
         }
     }
 
-    if (!pending.empty() && handleMessage(client_fd, pending))
+    auto shouldClose = handleMessage(client_fd, pending);
+    if (!pending.empty() && shouldClose)
         return next_action::Shutdown;
 
     return next_action::KeepRuning;
-}
-
-bool data_interpreter::send_all(int client_fd, const std::string& msg)
-{
-    const char* p = msg.data();
-    size_t left   = msg.size();
-    while (left > 0) {
-        ssize_t n = send(client_fd, p, left, MSG_NOSIGNAL);
-        if (n < 0) {
-            if (errno == EINTR)
-                continue;
-            return false;
-        }
-        p += n;
-        left -= static_cast<size_t>(n);
-    }
-    return true;
 }
 
 bool data_interpreter::handleMessage(int client_fd, const std::string& msg)
@@ -71,16 +80,51 @@ bool data_interpreter::handleMessage(int client_fd, const std::string& msg)
         return true;
     }
 
-    nlohmann::json j;
-    j["test"]    = "test";
-    j["message"] = msg;
-    server_response response{1, next_action::KeepRuning, response_code::OK, j};
+    process_request(client_fd, msg);
 
-    if (!send_all(client_fd, response.stringify())) {
-        BOOST_LOG_TRIVIAL(error) << "Failed to send response to the user";
-    }
+    server_response response{1, next_action::KeepRuning, response_code::OK};
+
+    send_all(client_fd, response.stringify());
 
     return false;
+}
+
+void data_interpreter::process_request(int client_fd, const std::string& msg)
+{
+    json src;
+    try {
+        src = json::parse(msg);
+    } catch (const json::parse_error& e) {
+        send_all(client_fd, error(e.what()).stringify());
+    }
+
+    int id = (src.contains("id") && src["id"].is_number_integer()) ? src["id"].get<int>() : 0;
+    try {
+        request req(src);
+        // look up req.cmd in m_commands and call the handler
+
+    } catch (const std::exception& e) {
+        send_all(client_fd, error(e.what()).stringify());
+    }
+}
+
+void data_interpreter::send_all(int client_fd, const std::string& msg)
+{
+    const char* p = msg.data();
+    size_t left   = msg.size();
+    while (left > 0) {
+        ssize_t n = send(client_fd, p, left, MSG_NOSIGNAL);
+        if (n < 0) {
+            if (errno == EINTR) {
+                continue;
+            } else {
+                BOOST_LOG_TRIVIAL(error) << "Failed to response to the user";
+                return;
+            }
+        }
+        p += n;
+        left -= static_cast<size_t>(n);
+    }
 }
 
 bool data_interpreter::wasReadSuccessful(size_t n)
@@ -96,6 +140,13 @@ bool data_interpreter::wasReadSuccessful(size_t n)
         return true;
     }
     return true;
+}
+
+server_response data_interpreter::error(const std::string& what)
+{
+    nlohmann::json resp;
+    resp["what"] = what;
+    return {-1, next_action::KeepRuning, response_code::SERVER_ERROR, resp};
 }
 
 } // namespace felix_daemon
