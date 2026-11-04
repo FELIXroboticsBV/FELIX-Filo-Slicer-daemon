@@ -14,8 +14,10 @@
 #include <exception>
 #include <libslic3r/Model.hpp>
 #include <libslic3r/PresetBundle.hpp>
+#include <libslic3r/Print.hpp>
 #include <stdexcept>
 #include "utils/build_printer_preset_string.hpp"
+#include "utils/sync_filament_self_index.hpp"
 
 namespace felix_daemon {
 
@@ -67,11 +69,34 @@ struct cmdSetPrinter_Parameters : public cmdParameters
     }
 };
 
+struct cmdSlice_Parameters : public cmdParameters
+{
+    std::string modelPath;  // from where the model was loaded (should be cached one)
+    std::string outputPath; // where to store the g-code
+
+    void parse(const json& parameters) override
+    {
+        auto it = parameters.find("modelPath");
+
+        if (it == parameters.end() || !it->is_string())
+            throw std::invalid_argument("missing or invalid 'path'");
+
+        modelPath = it->get<std::string>();
+
+        it = parameters.find("outputPath");
+
+        if (it == parameters.end() || !it->is_string())
+            throw std::invalid_argument("missing or invalid 'outputPath'");
+
+        outputPath = it->get<std::string>();
+    }
+};
+
 /*************************************************************************************
     COMMANDS DEFINITIONS
 **************************************************************************************/
 
-orca_session::orca_session() : m_presetBundle(std::make_unique<Slic3r::PresetBundle>())
+orca_session::orca_session() : m_presetBundle(std::make_unique<Slic3r::PresetBundle>()), m_print(std::make_unique<Slic3r::Print>())
 {
     auto result = m_presetBundle->load_system_presets_from_json(Slic3r::ForwardCompatibilitySubstitutionRule::EnableSilent);
     if (result.second != "") {
@@ -131,6 +156,21 @@ orca_response orca_session::cmd_set_printer(const nlohmann::json& parameters)
         m_presetBundle->printers.select_preset_by_name(presetName, true);
         m_presetBundle->update_compatible(Slic3r::PresetSelectCompatibleType::Always);
 
+        const auto* nozzles    = preset->config.option<Slic3r::ConfigOptionFloats>("nozzle_diameter");
+        const size_t extruders = nozzles ? nozzles->values.size() : 1;
+
+        // handles printers that have double extruder
+        if (auto* nvt = m_presetBundle->project_config.option<Slic3r::ConfigOptionEnumsGeneric>("nozzle_volume_type")) {
+            const int def = nvt->values.empty() ? 0 : nvt->values.front();
+            nvt->values.resize(extruders, def);
+        }
+
+        if (m_presetBundle->filament_presets.size() < extruders)
+            m_presetBundle->set_num_filaments(static_cast<unsigned>(extruders));
+
+        m_printerKey    = p.printer_key;
+        m_printerPreset = presetName;
+
         const auto& cfg    = preset->config;
         nlohmann::json bed = nlohmann::json::array();
         if (auto* area = cfg.option<Slic3r::ConfigOptionPoints>("printable_area"))
@@ -139,8 +179,7 @@ orca_response orca_session::cmd_set_printer(const nlohmann::json& parameters)
 
         json res_body;
         res_body["bed"]              = bed;
-        res_body["printer"]          = p.printer_key;
-        res_body["nozzle_size"]      = p.nozzle_size;
+        res_body["printer"]          = preset->name;
         res_body["nozzle_size"]      = p.nozzle_size;
         res_body["printable_height"] = cfg.opt_float("printable_height");
 
@@ -148,6 +187,54 @@ orca_response orca_session::cmd_set_printer(const nlohmann::json& parameters)
 
     } catch (std::exception& e) {
         return orca_error_response(orca_response_code::invalid_parameters, e.what());
+    }
+}
+
+orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
+{
+    try {
+        cmdSlice_Parameters params;
+        params.parse(parameters);
+
+        auto it = m_meshCache.find(params.modelPath);
+        if (it == m_meshCache.end())
+            throw std::invalid_argument("unknown model_id");
+        if (m_printerPreset.empty())
+            throw std::runtime_error("no printer set, first set the printer with set_printer command");
+
+        Slic3r::Model& model                         = *it->second;
+        const Slic3r::DynamicPrintConfig& printerCfg = m_presetBundle->printers.get_edited_preset().config;
+        const auto* area                             = printerCfg.option<Slic3r::ConfigOptionPoints>("printable_area");
+        Slic3r::BoundingBoxf bedBox(area->values);
+        model.add_default_instances();
+        model.center_instances_around_point(bedBox.center());
+        for (Slic3r::ModelObject* obj : model.objects)
+            obj->ensure_on_bed();
+
+        Slic3r::DynamicPrintConfig config = m_presetBundle->full_config();
+        felix_daemon::utils::sync_filament_self_index(*m_presetBundle, config);
+
+        m_print->apply(model, config);
+
+        Slic3r::StringObjectException err = m_print->validate();
+        if (!err.string.empty()) {
+            return orca_error_response(orca_response_code::failed, err.string);
+        }
+
+        m_print->process();
+
+        Slic3r::GCodeProcessorResult gcodeResult;
+        std::string written = m_print->export_gcode(params.outputPath, &gcodeResult, nullptr);
+
+        json res_body;
+        res_body["gcode_path"] = written;
+        res_body["process"]    = m_presetBundle->prints.get_selected_preset_name();
+        res_body["filament"]   = m_presetBundle->filament_presets.empty() ? "" : m_presetBundle->filament_presets.front();
+
+        return orca_success_response("Successfully sliced the model", res_body);
+
+    } catch (std::exception& e) {
+        return orca_error_response(orca_response_code::failed, e.what());
     }
 }
 

@@ -42,6 +42,7 @@ data_interpreter::data_interpreter(orca_session& orca_session)
 {
     m_commands.emplace("load_model", [s = &orca_session](const json& p) { return s->cmd_load_model(p); });
     m_commands.emplace("set_printer", [s = &orca_session](const json& p) { return s->cmd_set_printer(p); });
+    m_commands.emplace("slice", [s = &orca_session](const json& p) { return s->cmd_slice(p); });
 }
 next_action data_interpreter::operator()(int client_fd)
 {
