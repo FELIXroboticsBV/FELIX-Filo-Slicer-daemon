@@ -29,6 +29,7 @@ install_*
 build_*/
 SVG
 src/OrcaSlicer-doc/
+src/daemon/system
 .idea/
 /.cache/
 *.mo

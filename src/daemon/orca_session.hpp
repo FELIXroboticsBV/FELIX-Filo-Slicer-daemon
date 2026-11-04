@@ -20,7 +20,8 @@
 
 namespace Slic3r {
 class Model;
-}
+class PresetBundle;
+} // namespace Slic3r
 
 namespace felix_daemon {
 
@@ -36,10 +37,18 @@ public:
      */
     orca_response cmd_load_model(const nlohmann::json& parameters);
 
+    /**
+     * Sets the printer that will be used for slicing
+     * @param  {nlohmann::json} parameters : data received from the request
+     * @return {orca_response}             : response from the orca slicer
+     */
+    orca_response cmd_set_printer(const nlohmann::json& parameters);
+
     ~orca_session();
 
 private:
     std::unordered_map<std::string, std::unique_ptr<Slic3r::Model>> m_meshCache;
+    std::unique_ptr<Slic3r::PresetBundle> m_presetBundle;
 };
 
 } // namespace felix_daemon

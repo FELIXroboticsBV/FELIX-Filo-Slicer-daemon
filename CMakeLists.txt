@@ -15,6 +15,8 @@ endif()
 # It just lets you later do `set_property(TARGET foo PROPERTY FOLDER "bar")`
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
+
+
 if (WIN32)
     # Detect known CI environments
     set(IS_CI FALSE)
