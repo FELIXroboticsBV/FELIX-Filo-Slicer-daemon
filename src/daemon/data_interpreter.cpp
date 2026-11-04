@@ -9,6 +9,7 @@
 #include "boost/log/trivial.hpp"
 #include "orca_session.hpp"
 #include <json_fwd.hpp>
+#include <stdexcept>
 #include <sys/socket.h>
 
 namespace felix_daemon {
@@ -106,13 +107,17 @@ void data_interpreter::process_request(int client_fd, const std::string& msg)
     try {
         request req(src);
 
-        auto response = m_commands.find(req.cmd)->second(req.params);
+        auto action = m_commands.find(req.cmd);
+        if (action == m_commands.end()) {
+            throw std::invalid_argument("Unknow command : " + req.cmd);
+        }
+        auto response = action->second(req.params);
 
         if (response.failed) {
             safe_send(client_fd, error(id, response.message).stringify());
         } else {
             auto body = response.json.value_or({});
-            safe_send(client_fd, success(id, "Command success full !", body).stringify());
+            safe_send(client_fd, success(id, response.message, body).stringify());
         }
 
     } catch (const std::exception& e) {

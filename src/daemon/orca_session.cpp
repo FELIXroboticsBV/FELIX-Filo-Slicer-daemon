@@ -168,6 +168,9 @@ orca_response orca_session::cmd_set_printer(const nlohmann::json& parameters)
         if (m_presetBundle->filament_presets.size() < extruders)
             m_presetBundle->set_num_filaments(static_cast<unsigned>(extruders));
 
+        Slic3r::DynamicPrintConfig config = m_presetBundle->full_config();
+        felix_daemon::utils::sync_filament_self_index(*m_presetBundle, config);
+
         m_printerKey    = p.printer_key;
         m_printerPreset = presetName;
 
