@@ -21,6 +21,8 @@ add_executable(orca-daemon ${ORCA_DAEMON_SOURCES}
  utils/build_printer_preset_string.cpp
  utils/create_profiles_directories.hpp
  utils/create_profiles_directories.cpp
+ utils/sync_filament_self_index.hpp
+ utils/sync_filament_self_index.cpp
  )
 
 

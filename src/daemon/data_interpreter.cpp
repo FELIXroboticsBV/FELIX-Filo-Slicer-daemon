@@ -9,6 +9,7 @@
 #include "boost/log/trivial.hpp"
 #include "orca_session.hpp"
 #include <json_fwd.hpp>
+#include <stdexcept>
 #include <sys/socket.h>
 
 namespace felix_daemon {
@@ -42,6 +43,7 @@ data_interpreter::data_interpreter(orca_session& orca_session)
 {
     m_commands.emplace("load_model", [s = &orca_session](const json& p) { return s->cmd_load_model(p); });
     m_commands.emplace("set_printer", [s = &orca_session](const json& p) { return s->cmd_set_printer(p); });
+    m_commands.emplace("slice", [s = &orca_session](const json& p) { return s->cmd_slice(p); });
 }
 next_action data_interpreter::operator()(int client_fd)
 {
@@ -105,13 +107,17 @@ void data_interpreter::process_request(int client_fd, const std::string& msg)
     try {
         request req(src);
 
-        auto response = m_commands.find(req.cmd)->second(req.params);
+        auto action = m_commands.find(req.cmd);
+        if (action == m_commands.end()) {
+            throw std::invalid_argument("Unknow command : " + req.cmd);
+        }
+        auto response = action->second(req.params);
 
         if (response.failed) {
             safe_send(client_fd, error(id, response.message).stringify());
         } else {
             auto body = response.json.value_or({});
-            safe_send(client_fd, success(id, "Command success full !", body).stringify());
+            safe_send(client_fd, success(id, response.message, body).stringify());
         }
 
     } catch (const std::exception& e) {
