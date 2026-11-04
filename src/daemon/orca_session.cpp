@@ -71,7 +71,7 @@ struct cmdSetPrinter_Parameters : public cmdParameters
     COMMANDS DEFINITIONS
 **************************************************************************************/
 
-orca_session::orca_session()
+orca_session::orca_session() : m_presetBundle(std::make_unique<Slic3r::PresetBundle>())
 {
     auto result = m_presetBundle->load_system_presets_from_json(Slic3r::ForwardCompatibilitySubstitutionRule::EnableSilent);
     if (result.second != "") {
