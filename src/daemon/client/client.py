@@ -1,4 +1,5 @@
 """Tiny test client for the Orca daemon.
+!!! this is AI slop as i do not have time to write proper test client 
 
 Usage:
   orca_client.py [--socket PATH]                     interactive mode
@@ -16,9 +17,44 @@ import json
 import socket
 import sys
 import threading
+from pathlib import Path
 
 DEFAULT_SOCKET = "/run/user/1000/felix-orca-daemon.sock"
 
+
+ASSETS = Path(__file__).resolve().parent / "assets"
+MODEL  = str(ASSETS / "dino.stl")
+GCODE  = str(ASSETS / "dino.gcode")
+
+SHORTCUTS = {
+    "load":    ("load_model",  {"path": MODEL}),
+    "printer": ("set_printer", {"printer_key": "felix_pro_3", "nozzle_size": 0.35}),
+    "slice":   ("slice",       {"modelPath": MODEL, "outputPath": GCODE}),
+}
+SEQUENCES = {
+    "all": ["load", "printer", "slice"],
+}
+
+def run_shortcut(client, name, timeout):
+    for step in SEQUENCES.get(name, [name]):
+        cmd, params = SHORTCUTS[step]
+        reply = client.request(cmd, params, timeout)
+        if not reply or "error" in reply:
+            return reply
+    return reply
+
+def print_help():
+    print("Commands (local, not sent):")
+    print("  help                 show this help")
+    print("  quit / exit          leave the client")
+    print("Shortcuts:")
+    for name, (cmd, params) in SHORTCUTS.items():
+        print(f"  {name:<20} {cmd} {json.dumps(params)}")
+    for name, steps in SEQUENCES.items():
+        print(f"  {name:<20} runs: {' -> '.join(steps)}")
+    print("Manual:")
+    print("  cmd {json}           e.g. load_model {\"path\": \"/tmp/part.stl\"}")
+    print("  {raw json}           sent as-is, reply not awaited")
 
 class Client:
     def __init__(self, path):
@@ -109,7 +145,7 @@ def parse_input(line):
 
 
 def interactive(client, timeout):
-    print("Connected. Type 'cmd {params}', a raw JSON line, or 'quit'.")
+    print("Connected. Type 'help' for options.")
     while not client.closed.is_set():
         try:
             line = input("> ").strip()
@@ -120,6 +156,12 @@ def interactive(client, timeout):
             continue
         if line in ("quit", "exit"):
             break
+        if line in ("help", "?"):
+            print_help()
+            continue
+        if line in SHORTCUTS or line in SEQUENCES:
+            run_shortcut(client, line, timeout)
+            continue
         if line.startswith("{"):
             client.send_raw(line)       # raw: sent as-is, not waited on
             continue
@@ -149,8 +191,11 @@ def main():
         if args.cmd is None:
             interactive(client, args.timeout)
             return 0
-        params = json.loads(args.params) if args.params else None
-        reply = client.request(args.cmd, params, args.timeout)
+        if args.cmd in SHORTCUTS or args.cmd in SEQUENCES:
+            reply = run_shortcut(client, args.cmd, args.timeout)
+        else:
+            params = json.loads(args.params) if args.params else None
+            reply = client.request(args.cmd, params, args.timeout)
         return 0 if reply and "error" not in reply else 1
     finally:
         client.close()
