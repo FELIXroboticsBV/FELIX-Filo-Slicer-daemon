@@ -30,6 +30,8 @@ SHORTCUTS = {
     "load":    ("load_model",  {"path": MODEL}),
     "printer": ("set_printer", {"printer_key": "felix_pro_3", "nozzle_size": 0.35}),
     "slice":   ("slice",       {"modelPath": MODEL, "outputPath": GCODE}),
+    "status":  ("slice_status",  {}),
+
 }
 SEQUENCES = {
     "all": ["load", "printer", "slice"],

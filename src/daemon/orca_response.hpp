@@ -17,7 +17,7 @@
 #include <json.hpp>
 #include <optional>
 
-enum class orca_response_code { ok, failed, not_found, invalid_parameters };
+enum class orca_response_code { ok, failed, not_found, invalid_parameters, busy };
 
 struct orca_response
 {

@@ -18,7 +18,7 @@ enum class response_code {
     ok           = 200,
     not_found    = 404,
     user_error   = 400,
-    server_error = 500
+    server_error = 500,
 
 };
 
