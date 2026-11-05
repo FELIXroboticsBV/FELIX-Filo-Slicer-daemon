@@ -239,3 +239,51 @@ Response on failure:
 ```
 
 `state` is one of: `idle`, `slicing`, `done`, `failed`, `canceled`.
+
+## Building
+
+Only the daemon is built, not the full OrcaSlicer application. This takes two steps: build Orca's dependencies once, then build the `orca-daemon` target with the CMake preset.
+
+### Requirements
+
+- CMake 3.25 or newer (presets version 8 needs CMake 3.28+)
+- Ninja
+- A C++17 compiler: GCC/Clang on Linux, Xcode command line tools on macOS, Visual Studio 2022 on Windows
+
+### 1. Build the dependencies
+
+Dependencies only need to be built once, or again when `deps/` changes. They are placed in `deps/build`, which is where the preset expects them.
+
+**Linux**
+
+```bash
+./build_linux.sh -u   # install system packages (needs sudo, first time only)
+./build_linux.sh -d   # build dependencies only
+```
+
+**macOS**
+
+```bash
+./build_release_macos.sh -d -a arm64   # use -a x86_64 on Intel Macs
+```
+
+**Windows** (from _x64 Native Tools Command Prompt for VS 2022_)
+
+```bat
+build_release_vs2022.bat deps
+```
+
+> On Windows, the dependencies must be built in the same configuration as the daemon (Debug or Release), because MSVC cannot mix the two.
+
+### 2. Build the daemon
+
+From the repository root:
+
+```bash
+cmake --preset orca-daemon-build
+cmake --build --preset orca-daemon-build
+```
+
+This configures with `SLIC3R_GUI=OFF`, `SLIC3R_CAD=OFF` and `ORCA_DAEMON=ON`, and builds only the `orca-daemon` target into `out/build/orca-daemon-build/`.
+
+On Windows, run these commands from the _x64 Native Tools Command Prompt_ so Ninja finds the MSVC compiler.
