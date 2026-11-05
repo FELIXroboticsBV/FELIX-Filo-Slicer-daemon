@@ -25,7 +25,7 @@ namespace felix_daemon {
 
 /**
  * Server class is responsible for creating connection on the local UNIX sonet
- * Responses are handled, processed and send to the in the data_interpreter.hpp
+ * Responses are handled, processed and send to the in the router.hpp
  */
 class server
 {

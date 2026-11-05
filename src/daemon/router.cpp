@@ -5,7 +5,7 @@
 // Licensed under the GNU Affero General Public License v3.0 or later.
 // See the LICENSE file in the repository root for details.
 
-#include "data_interpreter.hpp"
+#include "router.hpp"
 #include "boost/log/trivial.hpp"
 #include "orca_session.hpp"
 #include <json_fwd.hpp>
@@ -39,7 +39,7 @@ struct request
     }
 };
 
-data_interpreter::data_interpreter(orca_session& orca_session)
+router::router(orca_session& orca_session)
 {
     m_commands.emplace("load_model", [s = &orca_session](const json& p) { return s->cmd_load_model(p); });
     m_commands.emplace("set_printer", [s = &orca_session](const json& p) { return s->cmd_set_printer(p); });
@@ -47,7 +47,7 @@ data_interpreter::data_interpreter(orca_session& orca_session)
     m_commands.emplace("slice_status", [s = &orca_session](const json& p) { return s->cmd_check_slice_progress(p); });
 }
 
-next_action data_interpreter::operator()(int client_fd)
+next_action router::operator()(int client_fd)
 {
     server_response response;
     // data that will arrive at the server
@@ -83,7 +83,7 @@ next_action data_interpreter::operator()(int client_fd)
     return next_action::keep_running;
 }
 
-bool data_interpreter::handle_message(int client_fd, const std::string& msg)
+bool router::handle_message(int client_fd, const std::string& msg)
 {
     BOOST_LOG_TRIVIAL(info) << "Received: " << msg;
 
@@ -96,7 +96,7 @@ bool data_interpreter::handle_message(int client_fd, const std::string& msg)
     return false;
 }
 
-void data_interpreter::process_request(int client_fd, const std::string& msg)
+void router::process_request(int client_fd, const std::string& msg)
 {
     json src;
     try {
@@ -127,7 +127,7 @@ void data_interpreter::process_request(int client_fd, const std::string& msg)
     }
 }
 
-void data_interpreter::safe_send(int client_fd, const std::string& msg)
+void router::safe_send(int client_fd, const std::string& msg)
 {
     const char* p = msg.data();
     size_t left   = msg.size();
@@ -146,7 +146,7 @@ void data_interpreter::safe_send(int client_fd, const std::string& msg)
     }
 }
 
-bool data_interpreter::was_read_successful(size_t n)
+bool router::was_read_successful(size_t n)
 {
     if (n == 0) {
         BOOST_LOG_TRIVIAL(warning) << "Client have closed the connection ";
@@ -161,14 +161,14 @@ bool data_interpreter::was_read_successful(size_t n)
     return true;
 }
 
-server_response data_interpreter::error(int id, const std::string& what)
+server_response router::error(int id, const std::string& what)
 {
     nlohmann::json resp;
     resp["what"] = what;
     return {id, next_action::keep_running, response_code::server_error, resp, what};
 }
 
-server_response data_interpreter::success(int id, const std::string& msg, json& body)
+server_response router::success(int id, const std::string& msg, json& body)
 {
     BOOST_LOG_TRIVIAL(info) << "Processed request \n \t end message: " << msg;
     return {id, next_action::keep_running, response_code::ok, body};

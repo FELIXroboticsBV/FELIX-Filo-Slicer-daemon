@@ -7,10 +7,11 @@
 
 /**
   ====================================================================================
-  data_interpreter.hpp
+  router.hpp
   ====================================================================================
 
-  interprets the message that the client sent to the orca
+  Interprets the raw json request and executes different commands that call orca
+  specific functionality
 */
 
 #pragma once
@@ -23,10 +24,10 @@
 
 namespace felix_daemon {
 class orca_session;
-class data_interpreter
+class router
 {
 public:
-    data_interpreter(orca_session& orca_session);
+    router(orca_session& orca_session);
 
     /**
      * Callback that is called by the server when client is connected.
@@ -52,7 +53,7 @@ private:
     bool handle_message(int client_fd, const std::string& msg);
 
     /**
-     * Safely sens the message, safely means that it ensure that the entire message is written
+     * Safely sends the message, safely means that it ensure that the entire message is written
      * @param  {int} clinet_fd   : client's file descriptor
      * @param  {std::string} msg : message (inlined json)
      */
