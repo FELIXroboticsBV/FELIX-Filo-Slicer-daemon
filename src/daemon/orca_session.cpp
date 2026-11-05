@@ -295,6 +295,7 @@ orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
         if (m_workerThread.joinable()) {
             m_workerThread.join();
         }
+        m_print->invalidate_gcode_export_from_worker();
         m_print->restart();
 
         felix_daemon::utils::sync_filament_self_index(*m_presetBundle, config);
@@ -314,6 +315,7 @@ orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
                 m_print->process();
 
                 Slic3r::GCodeProcessorResult gcodeResult;
+                // crash on the second slice here
                 std::string written = m_print->export_gcode(outputPath, &gcodeResult, nullptr);
 
                 // do not use set_state, since it would lock the thread twice

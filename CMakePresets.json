@@ -18,6 +18,7 @@
     {
       "name": "orca-daemon-build",
       "configurePreset": "orca-daemon-build",
+      "jobs": 8,
       "targets": ["orca-daemon"]
     }
   ]
