@@ -15,15 +15,19 @@
 #include <libslic3r/Model.hpp>
 #include <libslic3r/PresetBundle.hpp>
 #include <libslic3r/Print.hpp>
+#include <libslic3r/PrintBase.hpp>
+#include <mutex>
 #include <stdexcept>
 #include "utils/build_printer_preset_string.hpp"
 #include "utils/sync_filament_self_index.hpp"
 
 namespace felix_daemon {
 
-/*************************************************************************************
-    PARAMETERS STRUCTS DEFINITIONS
-**************************************************************************************/
+//=========================================================================================
+//-----------------------------------------------------------------------------------------
+// Parameters struct
+//-----------------------------------------------------------------------------------------
+//=========================================================================================
 struct cmdParameters
 {
     virtual void parse(const json& parameters) = 0;
@@ -92,9 +96,11 @@ struct cmdSlice_Parameters : public cmdParameters
     }
 };
 
-/*************************************************************************************
-    COMMANDS DEFINITIONS
-**************************************************************************************/
+//=========================================================================================
+//-----------------------------------------------------------------------------------------
+// Class helpers
+//-----------------------------------------------------------------------------------------
+//=========================================================================================
 
 orca_session::orca_session() : m_presetBundle(std::make_unique<Slic3r::PresetBundle>()), m_print(std::make_unique<Slic3r::Print>())
 {
@@ -103,10 +109,59 @@ orca_session::orca_session() : m_presetBundle(std::make_unique<Slic3r::PresetBun
         BOOST_LOG_TRIVIAL(error) << result.second << "\n \t data_dir: " << Slic3r::data_dir();
         throw std::runtime_error("failed to start the deamon !");
     }
+
+    // set up the progress call back
+    m_print->set_status_callback([this](const Slic3r::PrintBase::SlicingStatus& status) {
+        std::lock_guard<std::mutex> lock(m_slicingMutex);
+        if (status.percent >= 0) {
+            m_progress.percentage = status.percent;
+        }
+        if (!status.text.empty()) {
+            m_progress.message = status.text;
+        }
+        BOOST_LOG_TRIVIAL(info) << "Slicing progress \n \t percentage: " << m_progress.percentage << "\n \t msg: " << m_progress.message;
+    });
+}
+
+void orca_session::set_state(orca_state new_state)
+{
+    std::lock_guard<std::mutex> lock(m_slicingMutex);
+    if (new_state == orca_state::slicing) {
+        // if starting to slicing, reset the slicing stat
+        m_progress = {};
+    }
+    m_progress.state = new_state;
+}
+
+const char* to_string(orca_state s)
+{
+    switch (s) {
+    case orca_state::idle: return "idle";
+    case orca_state::slicing: return "slicing";
+    case orca_state::done: return "done";
+    case orca_state::failed: return "failed";
+    case orca_state::canceled: return "canceled";
+    }
+    return "unknown";
+}
+
+bool orca_session::is_slicing() const
+{
+    std::lock_guard<std::mutex> lock(m_slicingMutex);
+    return m_progress.state == orca_state::slicing;
 }
 
 orca_session::~orca_session() = default;
 
+//=========================================================================================
+//-----------------------------------------------------------------------------------------
+// Commands
+//-----------------------------------------------------------------------------------------
+//=========================================================================================
+
+/*******************************************************************************
+Load model command
+********************************************************************************/
 orca_response orca_session::cmd_load_model(const nlohmann::json& parameters)
 {
     // parse the parameters
@@ -135,6 +190,9 @@ orca_response orca_session::cmd_load_model(const nlohmann::json& parameters)
     }
 }
 
+/*******************************************************************************
+Set printer command
+********************************************************************************/
 orca_response orca_session::cmd_set_printer(const nlohmann::json& parameters)
 {
     try {
@@ -193,8 +251,16 @@ orca_response orca_session::cmd_set_printer(const nlohmann::json& parameters)
     }
 }
 
+/*******************************************************************************
+Slice command
+********************************************************************************/
 orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
 {
+    if (is_slicing()) {
+        return orca_error_response(
+            orca_response_code::busy,
+            "Slicing is allready in progress, wait until slicing is finished, to see the status query slicing_status");
+    }
     try {
         cmdSlice_Parameters params;
         params.parse(parameters);
@@ -205,40 +271,100 @@ orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
         if (m_printerPreset.empty())
             throw std::runtime_error("no printer set, first set the printer with set_printer command");
 
-        Slic3r::Model& model                         = *it->second;
-        const Slic3r::DynamicPrintConfig& printerCfg = m_presetBundle->printers.get_edited_preset().config;
-        const auto* area                             = printerCfg.option<Slic3r::ConfigOptionPoints>("printable_area");
-        Slic3r::BoundingBoxf bedBox(area->values);
+        // get the correct model
+        auto& model = *it->second;
+        // get the configuration of the printer (filament  etc etc )
+        const auto& printerCfg = m_presetBundle->printers.get_edited_preset().config;
+
+        // get the printer bed and create an object on it
+        Slic3r::BoundingBoxf bedBox(printerCfg.option<Slic3r::ConfigOptionPoints>("printable_area")->values);
         model.add_default_instances();
         model.center_instances_around_point(bedBox.center());
-        for (Slic3r::ModelObject* obj : model.objects)
+        for (auto* obj : model.objects) {
             obj->ensure_on_bed();
+        }
 
-        Slic3r::DynamicPrintConfig config = m_presetBundle->full_config();
+        // adjust the filament list to take into the account double sided printers
+        auto config = m_presetBundle->full_config();
         felix_daemon::utils::sync_filament_self_index(*m_presetBundle, config);
 
+        // apply the configuration to the model
         m_print->apply(model, config);
+
+        // join the thread if it has finished
+        if (m_workerThread.joinable()) {
+            m_workerThread.join();
+        }
+        m_print->invalidate_gcode_export_from_worker();
+        m_print->restart();
+
+        felix_daemon::utils::sync_filament_self_index(*m_presetBundle, config);
+
+        set_state(orca_state::slicing);
 
         Slic3r::StringObjectException err = m_print->validate();
         if (!err.string.empty()) {
             return orca_error_response(orca_response_code::failed, err.string);
         }
 
-        m_print->process();
+        //===================================================================================================================
+        // Actual slicing happens here
+        // it is in the lambda expression, function continues on the main thread while lambda happens on the separate thread
+        m_workerThread = std::thread([this, outputPath = params.outputPath]() {
+            try {
+                m_print->process();
 
-        Slic3r::GCodeProcessorResult gcodeResult;
-        std::string written = m_print->export_gcode(params.outputPath, &gcodeResult, nullptr);
+                Slic3r::GCodeProcessorResult gcodeResult;
+                // crash on the second slice here
+                std::string written = m_print->export_gcode(outputPath, &gcodeResult, nullptr);
+
+                // do not use set_state, since it would lock the thread twice
+                std::lock_guard<std::mutex> lock(m_slicingMutex);
+                m_progress.state      = orca_state::done;
+                m_progress.percentage = 100;
+                m_progress.output     = written;
+            } catch (const Slic3r::CanceledException&) {
+                std::lock_guard<std::mutex> lock(m_slicingMutex);
+                m_progress.state = orca_state::canceled;
+            } catch (const std::exception& e) {
+                std::lock_guard<std::mutex> lock(m_slicingMutex);
+                m_progress.state   = orca_state::failed;
+                m_progress.message = e.what();
+            }
+        });
 
         json res_body;
-        res_body["gcode_path"] = written;
-        res_body["process"]    = m_presetBundle->prints.get_selected_preset_name();
-        res_body["filament"]   = m_presetBundle->filament_presets.empty() ? "" : m_presetBundle->filament_presets.front();
+        res_body["status"]   = "slicing...";
+        res_body["process"]  = m_presetBundle->prints.get_selected_preset_name();
+        res_body["filament"] = m_presetBundle->filament_presets.empty() ? "" : m_presetBundle->filament_presets.front();
 
-        return orca_success_response("Successfully sliced the model", res_body);
+        return orca_success_response("Successfully started to slice the model", res_body);
 
     } catch (std::exception& e) {
         return orca_error_response(orca_response_code::failed, e.what());
     }
+}
+
+/*******************************************************************************
+Check progress
+********************************************************************************/
+orca_response orca_session::cmd_check_slice_progress(const nlohmann::json& parameters)
+{
+    orca_slicing_progress progress;
+    {
+        std::lock_guard<std::mutex> lock(m_slicingMutex);
+        progress = m_progress;
+    }
+
+    json body;
+    body["state"]   = to_string(progress.state);
+    body["percent"] = progress.percentage;
+    body["text"]    = progress.message;
+    if (progress.state == orca_state::done)
+        body["gcode_path"] = progress.output;
+    if (progress.state == orca_state::failed)
+        body["error"] = progress.message;
+    return orca_success_response("Status check finished !", body);
 }
 
 } // namespace felix_daemon

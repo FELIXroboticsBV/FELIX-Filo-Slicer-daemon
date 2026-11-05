@@ -17,6 +17,8 @@
 
 #include "orca_response.hpp"
 #include <json_fwd.hpp>
+#include <mutex>
+#include <thread>
 
 namespace Slic3r {
 class Model;
@@ -25,6 +27,16 @@ class Print;
 } // namespace Slic3r
 
 namespace felix_daemon {
+
+enum class orca_state { idle, slicing, done, failed, canceled };
+
+struct orca_slicing_progress
+{
+    int percentage      = 0;
+    std::string message = "";
+    orca_state state    = orca_state::idle;
+    std::string output  = "";
+};
 
 class orca_session
 {
@@ -52,7 +64,33 @@ public:
      */
     orca_response cmd_slice(const nlohmann::json& parameters);
 
+    /**
+     * Checks the slicing progress
+     * @param  {nlohmann::json} parameters : data received from the request
+     * @return {orca_response}             : parameters are going to be empty in this one
+     */
+    orca_response cmd_check_slice_progress(const nlohmann::json& parameters);
+
+    /**
+     * Checks the status if the worker thread is busy with slicing
+     * @return {bool}  : true if status is slicing false otherwise
+     */
+    bool is_slicing() const;
+
+    /**
+     * Sets the state orca is currently in
+     * @param  {orca_state} new_state :  new state
+     */
+    void set_state(orca_state new_state);
+
     ~orca_session();
+
+private:
+    /**
+     * All functionality that must happen on the separate thread
+     * @param  {std::string} output_path : where the final g-code will be put
+     */
+    void slice_worker(std::string output_path);
 
 private:
     std::unordered_map<std::string, std::unique_ptr<Slic3r::Model>> m_meshCache;
@@ -61,6 +99,11 @@ private:
 
     std::string m_printerKey;
     std::string m_printerPreset;
+
+    orca_slicing_progress m_progress;
+
+    mutable std::mutex m_slicingMutex;
+    std::thread m_workerThread;
 };
 
 } // namespace felix_daemon
