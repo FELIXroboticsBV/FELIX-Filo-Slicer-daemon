@@ -2,22 +2,21 @@
 
 > In computing, a daemon (/ˈdiːmən/ DEE-mən or /ˈdeɪmən/ DAY-mən) is a program that runs as a background process, rather than being under the direct control of an interactive user. _(Wikipedia)_
 
-Daemon application which allows other application(s) utilise orca`s slicing capabilities without direct linking of the orca slicer.
+A daemon application that allows other applications to utilise Orca's slicing capabilities without linking directly against Orca Slicer.
 
-## High level overview
+## High-level overview
 
 <p align="center">
   <img width="600" src="./resources/readme_images/high-level-overview.png" />
 </p>
 
-Client server architecture is employed where daemon acts as a server and client is whatever is interesting slicing capabilities of orca.
+The project uses a client–server architecture: the daemon acts as the server, and the client is any application that wants to use Orca's slicing capabilities.
 
-Communication happens through the local socket which supports bidirectional (both ways) communication between two distinct processes (programs) on your computer. Server side (daemon) is responsible for creating this socket. Once the socket is created server will listen on the socket for any incomming connections / requests.
+Communication happens through a local socket, which supports bidirectional (two-way) communication between two separate processes (programs) on the same computer. The server side (the daemon) is responsible for creating this socket. Once the socket is created, the server listens on it for incoming connections and requests.
 
-Communication happens json file with standardized fields.
+Messages are exchanged as JSON with standardized fields.
 
 ### Request
-
 Request json composes of `id` field, `cmd` field and `params` field.
 
 - `id` : represents unique identifier for the request, client is responsible to provide the id to the server, thanks to this various requests can be easily identified.
