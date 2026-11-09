@@ -19,7 +19,7 @@ Messages are exchanged as JSON with standardized fields.
 ## Results
 
 <p align="center">
-  <img width="600" src="./resources/readme_images/daemon-vs-orcagui.png.png" />
+  <img width="600" src="./resources/readme_images/daemon-vs-orcagui.png" />
 </p>
 
 Comparison between slicing user the daemon (left) vs Orca 4.5 GUI (right).
@@ -397,7 +397,7 @@ Request:
 
 Response:
 
-```json
+````json
 {
   "code": 200,
   "data": {
@@ -435,7 +435,7 @@ Dependencies only need to be built once, or again when `deps/` changes. They are
 ```bash
 ./build_linux.sh -u   # install system packages (needs sudo, first time only)
 ./build_linux.sh -d   # build dependencies only
-```
+````
 
 **macOS**
 
