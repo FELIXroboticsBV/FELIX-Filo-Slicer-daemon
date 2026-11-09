@@ -368,6 +368,38 @@ Response on failure:
 
 `state` is one of: `idle`, `slicing`, `done`, `failed`, `canceled`.
 
+### `get_state`
+
+Retrieves information about the current state of the orca.
+
+Takes no parameters
+
+Request:
+
+```json
+{ "id": 4, "cmd": "get_state", "params": {} }
+```
+
+Response:
+
+```json
+{
+  "code": 200,
+  "data": {
+    "filaments": [
+      "Food Medium Plastic Syringe @3.00mm",
+      "Food Medium Plastic Syringe @3.00mm"
+    ],
+    "models": [],
+    "num_extruders": 1,
+    "printer": "FELIX Food Single 3.00mm nozzle",
+    "printer_key": "felix_food_single",
+    "process": "Default Setting"
+  },
+  "id": 6
+}
+```
+
 ## Building
 
 Only the daemon is built, not the full OrcaSlicer application. This takes two steps: build Orca's dependencies once, then build the `orca-daemon` target with the CMake preset.

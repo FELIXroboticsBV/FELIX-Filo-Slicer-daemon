@@ -39,7 +39,7 @@ SHORTCUTS = {
     
     "slice":   ("slice",       {"modelPath": MODEL, "outputPath": GCODE}),
     "status":  ("slice_status",  {}),
-    "info": ("get_preset_info", {}),
+    "info": ("get_state", {}),
 }
 SEQUENCES = {
     "all": ["load", "printer", "filament", "process_normal", "slice"],
