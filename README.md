@@ -24,6 +24,8 @@ Messages are exchanged as JSON with standardized fields.
 
 Comparison between slicing user the daemon (left) vs Orca 4.5 GUI (right).
 
+# API Reference
+
 **Config**
 
 - FELIX Pro3 with 0.35 mm nozzle
@@ -416,7 +418,7 @@ Response:
   "id": 6
 }```
 
-## Building
+# Building
 
 Only the daemon is built, not the full OrcaSlicer application. This takes two steps: build Orca's dependencies once, then build the `orca-daemon` target with the CMake preset.
 
