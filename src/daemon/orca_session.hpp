@@ -87,6 +87,13 @@ public:
     orca_response cmd_set_process(const nlohmann::json& parameters);
 
     /**
+     * Retrieves data about currently set printer, fillament and model
+     * @param  {nlohmann::json} parameters : data received from the request
+     * @return {orca_response}             : parameters are going to be empty in this one
+     */
+    orca_response cmd_get_preset_info(const nlohmann::json& parameters);
+
+    /**
      * Checks the status if the worker thread is busy with slicing
      * @return {bool}  : true if status is slicing false otherwise
      */

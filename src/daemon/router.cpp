@@ -47,6 +47,7 @@ router::router(orca_session& orca_session)
     m_commands.emplace("set_process", [s = &orca_session](const json& p) { return s->cmd_set_process(p); });
     m_commands.emplace("slice", [s = &orca_session](const json& p) { return s->cmd_slice(p); });
     m_commands.emplace("slice_status", [s = &orca_session](const json& p) { return s->cmd_check_slice_progress(p); });
+    m_commands.emplace("get_preset_info", [s = &orca_session](const json& p) { return s->cmd_get_preset_info(p); });
 }
 
 next_action router::operator()(int client_fd)

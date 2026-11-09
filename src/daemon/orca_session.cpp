@@ -415,4 +415,36 @@ orca_response orca_session::cmd_set_process(const nlohmann::json& parameters)
     }
 }
 
+/*******************************************************************************
+Preset info
+********************************************************************************/
+orca_response orca_session::cmd_get_preset_info(const nlohmann::json& parameters)
+{
+    try {
+        auto printer   = m_presetBundle->printers.get_selected_preset_name();
+        auto filaments = m_presetBundle->filament_presets;
+        auto process   = m_presetBundle->prints.get_selected_preset_name();
+
+        const auto* nozzles = m_presetBundle->printers.get_selected_preset().config.option<Slic3r::ConfigOptionFloats>("nozzle_diameter");
+        auto numExtruders   = nozzles->size();
+
+        auto models = nlohmann::json::array();
+        for (const auto& [path, model] : m_meshCache)
+            models.push_back(path);
+
+        json res_body;
+        res_body["printer_key"]   = m_printerKey;
+        res_body["printer"]       = printer;
+        res_body["filaments"]     = filaments;
+        res_body["process"]       = process;
+        res_body["models"]        = models;
+        res_body["num_extruders"] = numExtruders;
+
+        return orca_success_response("Preset info", res_body);
+
+    } catch (std::exception& e) {
+        return orca_error_response(orca_response_code::failed, e.what());
+    }
+}
+
 } // namespace felix_daemon
