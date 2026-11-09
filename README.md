@@ -24,14 +24,14 @@ Messages are exchanged as JSON with standardized fields.
 
 Comparison between slicing user the daemon (left) vs Orca 4.5 GUI (right).
 
-# API Reference
-
 **Config**
 
 - FELIX Pro3 with 0.35 mm nozzle
 - normal quality
 
 As can be seen there is no difference in results.
+
+# API Reference
 
 ### Request
 
