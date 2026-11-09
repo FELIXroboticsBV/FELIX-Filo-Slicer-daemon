@@ -22,7 +22,7 @@ Messages are exchanged as JSON with standardized fields.
   <img width="600" src="./resources/readme_images/daemon-vs-orcagui.png" />
 </p>
 
-Comparison between slicing user the daemon (left) vs Orca 4.5 GUI (right).
+Comparison between slicing using the daemon (left) vs Orca 4.5 GUI (right).
 
 **Config**
 
