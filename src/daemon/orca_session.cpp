@@ -20,88 +20,8 @@
 #include <stdexcept>
 #include "utils/build_printer_preset_string.hpp"
 #include "utils/sync_filament_self_index.hpp"
-
+#include "orca_request_parameters.hpp"
 namespace felix_daemon {
-
-//=========================================================================================
-//-----------------------------------------------------------------------------------------
-// Parameters struct
-//-----------------------------------------------------------------------------------------
-//=========================================================================================
-
-static std::string find_parameter(const json& j, const std::string& parameter)
-{
-    auto it = j.find(parameter);
-    if (it == j.end() || !it->is_string() || it->get<std::string>().empty())
-        throw std::invalid_argument("missing or invalid '" + parameter + "'");
-    return it->get<std::string>();
-}
-
-static float find_number(const json& j, const std::string& parameter)
-{
-    auto it = j.find(parameter);
-    if (it == j.end() || !it->is_number())
-        throw std::invalid_argument("missing or invalid '" + parameter + "'");
-    return it->get<float>();
-}
-
-struct cmdParameters
-{
-    virtual ~cmdParameters()                   = default;
-    virtual void parse(const json& parameters) = 0;
-};
-
-struct cmdLoadModel_Parameters : public cmdParameters
-{
-    boost::filesystem::path path;
-
-    void parse(const json& parameters) override
-    {
-        path = find_parameter(parameters, "path");
-        if (!boost::filesystem::exists(path))
-            throw std::invalid_argument("model not found: " + path.string());
-    }
-};
-
-struct cmdSetPrinter_Parameters : public cmdParameters
-{
-    std::string printer_key;
-    float nozzle_size = 0.f;
-
-    void parse(const json& parameters) override
-    {
-        printer_key = find_parameter(parameters, "printer_key");
-        nozzle_size = find_number(parameters, "nozzle_size");
-        if (nozzle_size <= 0.f)
-            throw std::invalid_argument("'nozzle_size' must be greater than 0");
-    }
-};
-
-struct cmdSlice_Parameters : public cmdParameters
-{
-    std::string modelPath;  // from where the model was loaded (cache key)
-    std::string outputPath; // where to store the g-code
-
-    void parse(const json& parameters) override
-    {
-        modelPath  = find_parameter(parameters, "modelPath");
-        outputPath = find_parameter(parameters, "outputPath");
-    }
-};
-
-struct cmdSetFilament_Parameters : public cmdParameters
-{
-    std::string filament_key;
-    std::string nozzle_key;
-    int extruder = 0;
-
-    void parse(const json& parameters) override
-    {
-        filament_key = find_parameter(parameters, "filament_key");
-        nozzle_key   = find_parameter(parameters, "nozzle_key");
-        extruder     = find_number(parameters, "extruder");
-    }
-};
 
 //=========================================================================================
 //-----------------------------------------------------------------------------------------
@@ -218,6 +138,7 @@ orca_response orca_session::cmd_set_printer(const nlohmann::json& parameters)
         if (!preset || !preset->is_system)
             return orca_error_response(orca_response_code::failed, "orca system profile not found: " + presetName);
 
+        // selects the printer
         m_presetBundle->printers.select_preset_by_name(presetName, true);
         m_presetBundle->update_compatible(Slic3r::PresetSelectCompatibleType::Always);
 
@@ -295,14 +216,32 @@ orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
         auto config = m_presetBundle->full_config();
         felix_daemon::utils::sync_filament_self_index(*m_presetBundle, config);
 
-        // apply the configuration to the model
-        m_print->apply(model, config);
-
         // join the thread if it has finished
         if (m_workerThread.joinable()) {
             m_workerThread.join();
         }
+
+        // apply the configuration to the model
+        auto applyStatus = m_print->apply(model, config);
         m_print->invalidate_gcode_export_from_worker();
+
+        // nothing has changed
+        if (applyStatus == Slic3r::PrintBase::APPLY_STATUS_UNCHANGED && !m_lastOutput.empty() && boost::filesystem::exists(m_lastOutput)) {
+            if (m_lastOutput != params.outputPath)
+                boost::filesystem::copy_file(m_lastOutput, params.outputPath, boost::filesystem::copy_options::overwrite_existing);
+
+            std::lock_guard<std::mutex> lock(m_slicingMutex);
+            m_progress            = {};
+            m_progress.state      = orca_state::done;
+            m_progress.percentage = 100;
+            m_progress.output     = params.outputPath;
+            m_lastOutput          = params.outputPath;
+
+            json res_body;
+            res_body["status"] = "unchanged, reused previous gcode";
+            return orca_success_response("Nothing changed since the last slice", res_body);
+        }
+
         m_print->restart();
 
         felix_daemon::utils::sync_filament_self_index(*m_presetBundle, config);
@@ -341,7 +280,7 @@ orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
         });
 
         json res_body;
-        res_body["status"]   = "slicing...";
+        res_body["status"]   = "slicing started...";
         res_body["process"]  = m_presetBundle->prints.get_selected_preset_name();
         res_body["filament"] = m_presetBundle->filament_presets.empty() ? "" : m_presetBundle->filament_presets.front();
 
@@ -441,6 +380,39 @@ orca_response orca_session::cmd_set_filament(const nlohmann::json& parameters)
 /*******************************************************************************
 Set process
 ********************************************************************************/
-orca_response orca_session::cmd_set_process(const nlohmann::json& parameters) { return {}; }
+orca_response orca_session::cmd_set_process(const nlohmann::json& parameters)
+{
+    try {
+        cmdSetProcess_Parameters p;
+        p.parse(parameters);
+
+        if (m_printerKey.empty())
+            return orca_error_response(orca_response_code::failed, "set_printer must be called before set_process");
+
+        const auto* nozzles = m_presetBundle->printers.get_selected_preset().config.option<Slic3r::ConfigOptionFloats>("nozzle_diameter");
+        const float nozzleSize = nozzles && !nozzles->values.empty() ? static_cast<float>(nozzles->values.front()) : 0.f;
+
+        const std::string presetName = felix_daemon::utils::build_proccess_preset_string(m_printerKey, p.process_key, nozzleSize);
+        if (presetName.empty())
+            return orca_error_response(orca_response_code::failed, "invalid quality for " + m_printerKey + ": " + p.process_key);
+
+        const Slic3r::Preset* preset = m_presetBundle->prints.find_preset(presetName, false);
+        if (!preset)
+            return orca_error_response(orca_response_code::failed, "orca system profile not found: " + presetName);
+        if (!preset->is_compatible)
+            return orca_error_response(orca_response_code::failed, presetName + " is not compatible with " + m_printerPreset);
+
+        m_presetBundle->prints.select_preset_by_name(presetName, true);
+
+        json res_body;
+        res_body["process"]      = preset->name;
+        res_body["layer_height"] = preset->config.opt_float("layer_height");
+
+        return orca_success_response("Successfully set the process", res_body);
+
+    } catch (std::exception& e) {
+        return orca_error_response(orca_response_code::invalid_parameters, e.what());
+    }
+}
 
 } // namespace felix_daemon

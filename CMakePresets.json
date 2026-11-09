@@ -12,12 +12,25 @@
         "ORCA_DAEMON": "ON",
         "DEP_BUILD_DIR": "${sourceDir}/deps/build"
       }
+    },
+    {
+      "name": "orca-daemon-relwithdebinfo",
+      "inherits": "orca-daemon-build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
     }
   ],
   "buildPresets": [
     {
       "name": "orca-daemon-build",
       "configurePreset": "orca-daemon-build",
+      "jobs": 8,
+      "targets": ["orca-daemon"]
+    },
+    {
+      "name": "orca-daemon-relwithdebinfo",
+      "configurePreset": "orca-daemon-relwithdebinfo",
       "jobs": 8,
       "targets": ["orca-daemon"]
     }

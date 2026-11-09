@@ -16,6 +16,7 @@
 #pragma once
 
 #include "orca_response.hpp"
+#include <boost/filesystem/path.hpp>
 #include <json_fwd.hpp>
 #include <mutex>
 #include <thread>
@@ -113,6 +114,7 @@ private:
 
     std::string m_printerKey;
     std::string m_printerPreset;
+    boost::filesystem::path m_lastOutput;
 
     orca_slicing_progress m_progress;
 

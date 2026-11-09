@@ -89,15 +89,18 @@ std::string build_filament_preset_string(const std::string& printer_key,
                                          const std::string& nozzle_key,
                                          float nozzle_size)
 {
+    // printer model does not exists
     if (k_printerModels.find(printer_key) == k_printerModels.end())
         return {};
 
     auto fil = k_filaments.find(filament_key);
     auto noz = k_nozzles.find(nozzle_key);
+    // filament or nozzle does not exist
     if (fil == k_filaments.end() || noz == k_nozzles.end())
         return {};
 
     const bool food = is_food_printer(printer_key);
+    // filament is not suitable for the food printer
     if (fil->second.food != food || noz->second.food != food)
         return {};
 
@@ -112,4 +115,46 @@ std::string build_filament_preset_string(const std::string& printer_key,
     auto result = k_filamentNameOverrides.find(name);
     return result != k_filamentNameOverrides.end() ? result->second : name;
 }
+
+struct QualityEntry
+{
+    const char* name;
+    bool food;
+    bool plastic;
+};
+
+static const std::unordered_map<std::string, QualityEntry> k_qualities = {
+    {"super_fine", {"Super Fine", false, true}},
+    {"very_fine", {"Very Fine", false, true}},
+    {"fine", {"Fine", true, true}},
+    {"normal", {"Normal", true, true}},
+    {"slightly_coarse", {"Slightly Coarse", false, true}},
+    {"coarse", {"Coarse", true, true}},
+    {"very_coarse", {"Very Coarse", false, true}},
+    {"super_coarse", {"Super Coarse", false, true}},
+};
+
+std::string build_proccess_preset_string(const std::string& printer_key, const std::string& quality_key, float nozzle_size)
+{
+    // printer model does not exist
+    if (k_printerModels.find(printer_key) == k_printerModels.end())
+        return {};
+
+    auto q = k_qualities.find(quality_key);
+    // quality key is invalid
+    if (q == k_qualities.end())
+        return {};
+
+    // the quality profile is not suited for the food printer
+    const bool food = is_food_printer(printer_key);
+    if (food ? !q->second.food : !q->second.plastic)
+        return {};
+
+    char size[16];
+    std::snprintf(size, sizeof(size), "%.2f", nozzle_size);
+
+    // "FELIX Food Coarse @ 0.50mm" / "FELIX Plastic Super Fine @ 0.25mm"
+    return std::string("FELIX ") + (food ? "Food" : "Plastic") + " " + q->second.name + " @ " + size + "mm";
+}
+
 } // namespace felix_daemon::utils
