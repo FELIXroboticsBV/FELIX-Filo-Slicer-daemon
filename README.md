@@ -399,14 +399,11 @@ Request:
 
 Response:
 
-````json
+```json
 {
   "code": 200,
   "data": {
-    "filaments": [
-      "FELIX PETG Hardened Steel @ 0.35mm",
-      ""
-    ],
+    "filaments": ["FELIX PETG Hardened Steel @ 0.35mm", ""],
     "models": [
       "/home/simon/Desktop/FelixPrinter/FELIX-Filo-Slicer-deamon/src/daemon/client/assets/dino.stl"
     ],
@@ -416,7 +413,8 @@ Response:
     "process": "FELIX Plastic Normal @ 0.35mm"
   },
   "id": 6
-}```
+}
+```
 
 # Building
 
@@ -437,7 +435,7 @@ Dependencies only need to be built once, or again when `deps/` changes. They are
 ```bash
 ./build_linux.sh -u   # install system packages (needs sudo, first time only)
 ./build_linux.sh -d   # build dependencies only
-````
+```
 
 **macOS**
 
