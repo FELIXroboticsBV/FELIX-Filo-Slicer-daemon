@@ -402,18 +402,19 @@ Response:
   "code": 200,
   "data": {
     "filaments": [
-      "Food Medium Plastic Syringe @3.00mm",
-      "Food Medium Plastic Syringe @3.00mm"
+      "FELIX PETG Hardened Steel @ 0.35mm",
+      ""
     ],
-    "models": [],
-    "num_extruders": 1,
-    "printer": "FELIX Food Single 3.00mm nozzle",
-    "printer_key": "felix_food_single",
-    "process": "Default Setting"
+    "models": [
+      "/home/simon/Desktop/FelixPrinter/FELIX-Filo-Slicer-deamon/src/daemon/client/assets/dino.stl"
+    ],
+    "num_extruders": 2,
+    "printer": "FELIX Pro 3 0.35mm nozzle",
+    "printer_key": "felix_pro_3",
+    "process": "FELIX Plastic Normal @ 0.35mm"
   },
   "id": 6
-}
-```
+}```
 
 ## Building
 
