@@ -43,6 +43,8 @@ router::router(orca_session& orca_session)
 {
     m_commands.emplace("load_model", [s = &orca_session](const json& p) { return s->cmd_load_model(p); });
     m_commands.emplace("set_printer", [s = &orca_session](const json& p) { return s->cmd_set_printer(p); });
+    m_commands.emplace("set_filament", [s = &orca_session](const json& p) { return s->cmd_set_filament(p); });
+    m_commands.emplace("set_process", [s = &orca_session](const json& p) { return s->cmd_set_process(p); });
     m_commands.emplace("slice", [s = &orca_session](const json& p) { return s->cmd_slice(p); });
     m_commands.emplace("slice_status", [s = &orca_session](const json& p) { return s->cmd_check_slice_progress(p); });
 }
@@ -163,6 +165,8 @@ bool router::was_read_successful(size_t n)
 
 server_response router::error(int id, const std::string& what)
 {
+    BOOST_LOG_TRIVIAL(error) << what;
+
     nlohmann::json resp;
     resp["what"] = what;
     return {id, next_action::keep_running, response_code::server_error, resp, what};

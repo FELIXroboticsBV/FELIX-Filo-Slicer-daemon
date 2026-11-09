@@ -19,7 +19,7 @@ import sys
 import threading
 from pathlib import Path
 
-DEFAULT_SOCKET = "/run/user/1000/felix-orca-daemon.sock"
+DEFAULT_SOCKET = "/run/user/1000/felix-daemon"
 
 
 ASSETS = Path(__file__).resolve().parent / "assets"
@@ -29,12 +29,19 @@ GCODE  = str(ASSETS / "dino.gcode")
 SHORTCUTS = {
     "load":    ("load_model",  {"path": MODEL}),
     "printer": ("set_printer", {"printer_key": "felix_pro_3", "nozzle_size": 0.35}),
+    "filament": ("set_filament", {"filament_key": "felix_petg", "nozzle_key": "hardened_steel", "extruder": 0}),
+    
+    "printer_food": ("set_printer", {"printer_key": "felix_food_single", "nozzle_size": 3.0}),
+    "filament_food": ("set_filament", {"filament_key": "food_thick", "nozzle_key": "stainless_steel", "extruder": 0}),
+
+    "process_normal": ("set_process", {"process_key": "normal"}),
+    "process_coarse": ("set_process", {"process_key": "coarse"}),
+    
     "slice":   ("slice",       {"modelPath": MODEL, "outputPath": GCODE}),
     "status":  ("slice_status",  {}),
-
 }
 SEQUENCES = {
-    "all": ["load", "printer", "slice"],
+    "all": ["load", "printer", "filament", "process_normal", "slice"],
 }
 
 def run_shortcut(client, name, timeout):

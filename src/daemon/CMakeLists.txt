@@ -25,6 +25,10 @@ add_executable(orca-daemon ${ORCA_DAEMON_SOURCES}
  utils/sync_filament_self_index.cpp
  )
 
+ target_compile_definitions(orca-daemon PRIVATE
+    $<$<CONFIG:Debug,RelWithDebInfo>:ORCA_RESOURCES_DIR="${CMAKE_SOURCE_DIR}/resources">
+    $<$<CONFIG:Debug,RelWithDebInfo>:ORCA_DAEMON_DATA_DIR="${CMAKE_BINARY_DIR}/daemon-data">
+)
 
  
 target_compile_features(orca-daemon PRIVATE cxx_std_17)
