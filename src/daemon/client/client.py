@@ -29,12 +29,16 @@ GCODE  = str(ASSETS / "dino.gcode")
 SHORTCUTS = {
     "load":    ("load_model",  {"path": MODEL}),
     "printer": ("set_printer", {"printer_key": "felix_pro_3", "nozzle_size": 0.35}),
+    "filament": ("set_filament", {"filament_key": "felix_petg", "nozzle_key": "hardened_steel", "extruder": 0}),
+    
+    "printer_food": ("set_printer", {"printer_key": "felix_food_single", "nozzle_size": 3.0}),
+    "filament_food": ("set_filament", {"filament_key": "food_thick", "nozzle_key": "stainless_steel", "extruder": 0}),
+    
     "slice":   ("slice",       {"modelPath": MODEL, "outputPath": GCODE}),
     "status":  ("slice_status",  {}),
-
 }
 SEQUENCES = {
-    "all": ["load", "printer", "slice"],
+    "all": ["load", "printer", "filament", "slice"],
 }
 
 def run_shortcut(client, name, timeout):

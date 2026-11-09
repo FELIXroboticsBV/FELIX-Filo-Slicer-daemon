@@ -28,8 +28,26 @@ namespace felix_daemon {
 // Parameters struct
 //-----------------------------------------------------------------------------------------
 //=========================================================================================
+
+static std::string find_parameter(const json& j, const std::string& parameter)
+{
+    auto it = j.find(parameter);
+    if (it == j.end() || !it->is_string() || it->get<std::string>().empty())
+        throw std::invalid_argument("missing or invalid '" + parameter + "'");
+    return it->get<std::string>();
+}
+
+static float find_number(const json& j, const std::string& parameter)
+{
+    auto it = j.find(parameter);
+    if (it == j.end() || !it->is_number())
+        throw std::invalid_argument("missing or invalid '" + parameter + "'");
+    return it->get<float>();
+}
+
 struct cmdParameters
 {
+    virtual ~cmdParameters()                   = default;
     virtual void parse(const json& parameters) = 0;
 };
 
@@ -39,15 +57,9 @@ struct cmdLoadModel_Parameters : public cmdParameters
 
     void parse(const json& parameters) override
     {
-        auto it = parameters.find("path");
-
-        if (it == parameters.end() || !it->is_string())
-            throw std::invalid_argument("missing or invalid 'path'");
-        path = it->get<std::string>();
-
-        if (!boost::filesystem::exists(path)) {
-            throw std::invalid_argument("model was not found ! ");
-        }
+        path = find_parameter(parameters, "path");
+        if (!boost::filesystem::exists(path))
+            throw std::invalid_argument("model not found: " + path.string());
     }
 };
 
@@ -58,16 +70,8 @@ struct cmdSetPrinter_Parameters : public cmdParameters
 
     void parse(const json& parameters) override
     {
-        auto key = parameters.find("printer_key");
-        if (key == parameters.end() || !key->is_string() || key->get<std::string>().empty())
-            throw std::invalid_argument("missing or invalid 'printer_key'");
-        printer_key = key->get<std::string>();
-
-        auto size = parameters.find("nozzle_size");
-        if (size == parameters.end() || !size->is_number())
-            throw std::invalid_argument("missing or invalid 'nozzle_size'");
-        nozzle_size = size->get<float>();
-
+        printer_key = find_parameter(parameters, "printer_key");
+        nozzle_size = find_number(parameters, "nozzle_size");
         if (nozzle_size <= 0.f)
             throw std::invalid_argument("'nozzle_size' must be greater than 0");
     }
@@ -75,24 +79,27 @@ struct cmdSetPrinter_Parameters : public cmdParameters
 
 struct cmdSlice_Parameters : public cmdParameters
 {
-    std::string modelPath;  // from where the model was loaded (should be cached one)
+    std::string modelPath;  // from where the model was loaded (cache key)
     std::string outputPath; // where to store the g-code
 
     void parse(const json& parameters) override
     {
-        auto it = parameters.find("modelPath");
+        modelPath  = find_parameter(parameters, "modelPath");
+        outputPath = find_parameter(parameters, "outputPath");
+    }
+};
 
-        if (it == parameters.end() || !it->is_string())
-            throw std::invalid_argument("missing or invalid 'path'");
+struct cmdSetFilament_Parameters : public cmdParameters
+{
+    std::string filament_key;
+    std::string nozzle_key;
+    int extruder = 0;
 
-        modelPath = it->get<std::string>();
-
-        it = parameters.find("outputPath");
-
-        if (it == parameters.end() || !it->is_string())
-            throw std::invalid_argument("missing or invalid 'outputPath'");
-
-        outputPath = it->get<std::string>();
+    void parse(const json& parameters) override
+    {
+        filament_key = find_parameter(parameters, "filament_key");
+        nozzle_key   = find_parameter(parameters, "nozzle_key");
+        extruder     = find_number(parameters, "extruder");
     }
 };
 
@@ -366,5 +373,74 @@ orca_response orca_session::cmd_check_slice_progress(const nlohmann::json& param
         body["error"] = progress.message;
     return orca_success_response("Status check finished !", body);
 }
+
+/*******************************************************************************
+Set filament
+********************************************************************************/
+orca_response orca_session::cmd_set_filament(const nlohmann::json& parameters)
+{
+    try {
+        cmdSetFilament_Parameters p;
+        p.parse(parameters);
+
+        if (m_printerKey.empty())
+            return orca_error_response(orca_response_code::failed, "set_printer must be called before set_filament");
+
+        // nozzle size and extruder count come from the selected printer
+        auto& printer     = m_presetBundle->printers.get_selected_preset();
+        auto nozzles      = printer.config.option<Slic3r::ConfigOptionFloats>("nozzle_diameter");
+        auto numExtruders = nozzles ? nozzles->values.size() : 1;
+
+        if (p.extruder >= numExtruders)
+            return orca_error_response(orca_response_code::invalid_parameters, "extruder index " + std::to_string(p.extruder) +
+                                                                                   " out of range (printer has " +
+                                                                                   std::to_string(numExtruders) + ")");
+
+        auto nozzleSize = nozzles ? static_cast<float>(nozzles->values[p.extruder]) : 0.f;
+
+        // build the preset name (also checks food vs plastic)
+        const auto presetName = felix_daemon::utils::build_filament_preset_string(m_printerKey, p.filament_key, p.nozzle_key, nozzleSize);
+        if (presetName.empty())
+            return orca_error_response(orca_response_code::failed, "invalid filament/nozzle combination for " + m_printerKey + ": " +
+                                                                       p.filament_key + " / " + p.nozzle_key);
+
+        const Slic3r::Preset* preset = m_presetBundle->filaments.find_preset(presetName, false);
+        if (!preset || !preset->is_system)
+            return orca_error_response(orca_response_code::failed, "orca system profile not found: " + presetName);
+
+        // is_compatible was refreshed by update_compatible() in set_printer
+        if (!preset->is_compatible)
+            return orca_error_response(orca_response_code::failed, "filament " + presetName + " is not compatible with " + m_printerPreset);
+
+        // make sure the slot exists, then assign it
+        if (m_presetBundle->filament_presets.size() < numExtruders)
+            m_presetBundle->set_num_filaments(static_cast<unsigned>(numExtruders));
+
+        m_presetBundle->filament_presets[p.extruder] = presetName;
+
+        // slot 0 is also the collection's selected/edited preset (used by full_config for single extruder)
+        if (p.extruder == 0)
+            m_presetBundle->filaments.select_preset_by_name(presetName, true);
+
+        Slic3r::DynamicPrintConfig config = m_presetBundle->full_config();
+        felix_daemon::utils::sync_filament_self_index(*m_presetBundle, config);
+
+        json res_body;
+        res_body["filament"]    = preset->name;
+        res_body["extruder"]    = p.extruder;
+        res_body["nozzle_size"] = nozzleSize;
+        res_body["filaments"]   = m_presetBundle->filament_presets;
+
+        return orca_success_response("Successfully set the filament", res_body);
+
+    } catch (std::exception& e) {
+        return orca_error_response(orca_response_code::invalid_parameters, e.what());
+    }
+}
+
+/*******************************************************************************
+Set process
+********************************************************************************/
+orca_response orca_session::cmd_set_process(const nlohmann::json& parameters) { return {}; }
 
 } // namespace felix_daemon

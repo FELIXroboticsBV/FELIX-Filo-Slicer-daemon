@@ -15,4 +15,17 @@ namespace felix_daemon::utils {
  * @return {std::string}              : orca compatible name for the printer
  */
 std::string build_printer_preset_string(const std::string& printer_key, float nozzle_size);
+
+/**
+ * Provides functionality to build FELIX filament preset from various parameters
+ * @param  {std::string} printer_key  : key of the printer that is currently in use
+ * @param  {std::string} filament_key : key of the filament that should be set
+ * @param  {std::string} nozzle_key   : what kind of nozzle is going to be used for printing
+ * @param  {float} nozzle_size        : nozzle size
+ * @return {std::string}              : string that can be used in orca to set the prienter
+ */
+std::string build_filament_preset_string(const std::string& printer_key,
+                                         const std::string& filament_key,
+                                         const std::string& nozzle_key,
+                                         float nozzle_size);
 } // namespace felix_daemon::utils

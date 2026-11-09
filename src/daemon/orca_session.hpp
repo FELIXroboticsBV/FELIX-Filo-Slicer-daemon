@@ -72,6 +72,20 @@ public:
     orca_response cmd_check_slice_progress(const nlohmann::json& parameters);
 
     /**
+     * Set the filament for slicing
+     * @param  {nlohmann::json} parameters : data received from the request
+     * @return {orca_response}             : parameters are going to be empty in this one
+     */
+    orca_response cmd_set_filament(const nlohmann::json& parameters);
+
+    /**
+     * Set the filament for slicing
+     * @param  {nlohmann::json} parameters : data received from the request
+     * @return {orca_response}             : parameters are going to be empty in this one
+     */
+    orca_response cmd_set_process(const nlohmann::json& parameters);
+
+    /**
      * Checks the status if the worker thread is busy with slicing
      * @return {bool}  : true if status is slicing false otherwise
      */
