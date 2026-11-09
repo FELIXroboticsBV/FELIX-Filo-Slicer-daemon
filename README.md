@@ -52,8 +52,12 @@ On error, `data` is omitted and `message` explains the problem.
 
 1. `load_model`: load and cache a mesh
 2. `set_printer`: select the FELIX printer and nozzle
-3. `slice`: start slicing in the background
-4. `slice_status`: poll until `state` is `done`, `failed` or `canceled`
+3. `set_filament`: select the filament and nozzle/syringe type
+4. `set_process`: select the print quality
+5. `slice`: start slicing in the background
+6. `slice_status`: poll until `state` is `done`, `failed` or `canceled`
+
+> `set_filament` and `set_process` depend on the selected printer. Send them again after every `set_printer`.
 
 ---
 
@@ -146,6 +150,130 @@ Response:
 ```
 
 Errors: `invalid_parameters` (missing/empty key, nozzle ≤ 0), `failed` (unknown key, no matching system preset).
+
+---
+
+### `set_filament`
+
+Selects a FELIX system filament preset. The nozzle size is taken from the selected printer, so `set_printer` must be called first.
+
+| param          | type    | required | description                                                                     |
+| -------------- | ------- | -------- | ------------------------------------------------------------------------------- |
+| `filament_key` | string  | yes      | see tables below                                                                |
+| `nozzle_key`   | string  | yes      | nozzle material (plastic) or syringe type (food)                                |
+| `extruder`     | integer | no       | extruder index, default `0` (`1` for the second extruder on Food Double/Switch) |
+
+**Plastic printers** (`felix_pro_3`, `felix_pro_l_3`, `felix_pro_xl_3`, `felix_tec_4`)
+
+| filament_key                | filament                 |
+| --------------------------- | ------------------------ |
+| `felix_premium_pla`         | FELIX Premium PLA        |
+| `felix_petg`                | FELIX PETG               |
+| `felix_flex`                | FELIX FLEX               |
+| `felix_wood`                | FELIX Wood               |
+| `formfutura_epla`           | FORMFUTURA ePLA          |
+| `formfutura_titanx_abs`     | FORMFUTURA TitanX ABS    |
+| `formfutura_apollox_asa`    | FORMFUTURA AppoloX ASA   |
+| `formfutura_aquasolve_pva`  | FORMFUTURA Aquasolve PVA |
+| `ultrafuse_abs_fusion_plus` | Ultrafuse ABS Fusion+    |
+
+| nozzle_key       | nozzles (mm)           |
+| ---------------- | ---------------------- |
+| `brass`          | 0.35, 0.50             |
+| `hardened_steel` | 0.25, 0.35, 0.50, 0.70 |
+
+**Food printers** (`felix_food_single`, `felix_food_double`, `felix_food_switch`)
+
+| filament_key      | `plastic` syringe (mm)       | `stainless_steel` syringe (mm) |
+| ----------------- | ---------------------------- | ------------------------------ |
+| `food_very_thin`  | 0.50, 1.00, 2.00, 3.00, 4.00 | 0.50, 1.00, 2.00, 3.00, 4.00   |
+| `food_thin`       | 0.50, 1.00, 2.00, 3.00, 4.00 | 0.50, 1.00, 2.00, 3.00, 4.00   |
+| `food_medium`     | 0.50, 1.00, 2.00, 3.00, 4.00 | 0.50, 1.00, 2.00, 3.00, 4.00   |
+| `food_thick`      | –                            | 0.50, 1.00, 2.00, 3.00, 4.00   |
+| `food_very_thick` | –                            | 1.00, 2.00, 3.00, 4.00         |
+
+Request:
+
+```json
+{
+  "id": 3,
+  "cmd": "set_filament",
+  "params": {
+    "filament_key": "felix_petg",
+    "nozzle_key": "hardened_steel",
+    "extruder": 0
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "id": 3,
+  "code": "ok",
+  "message": "Successfully set the filament",
+  "data": {
+    "filament": "FELIX PETG Hardened Steel @ 0.35mm",
+    "extruder": 0,
+    "nozzle_size": 0.35,
+    "filaments": ["FELIX PETG Hardened Steel @ 0.35mm"]
+  }
+}
+```
+
+`filaments` lists the filament of every extruder slot.
+
+Errors: `invalid_parameters` (missing/empty key, bad or out-of-range `extruder`), `failed` (no printer set, unknown key, food/plastic mismatch, no matching system preset, filament not compatible with the printer).
+
+---
+
+### `set_process`
+
+Selects a FELIX system process (print quality) preset. The nozzle size is taken from the selected printer, so `set_printer` must be called first.
+
+| param         | type   | required | description     |
+| ------------- | ------ | -------- | --------------- |
+| `process_key` | string | yes      | see table below |
+
+| process_key       | food printers (mm) | plastic printers (mm)  |
+| ----------------- | ------------------ | ---------------------- |
+| `super_fine`      | –                  | 0.25, 0.35             |
+| `very_fine`       | –                  | 0.25, 0.35, 0.50       |
+| `fine`            | all                | 0.25, 0.35, 0.50, 0.70 |
+| `normal`          | all                | 0.25, 0.35, 0.50, 0.70 |
+| `slightly_coarse` | –                  | 0.35, 0.50, 0.70       |
+| `coarse`          | all                | 0.35, 0.50, 0.70       |
+| `very_coarse`     | –                  | 0.50, 0.70             |
+| `super_coarse`    | –                  | 0.70                   |
+
+Request:
+
+```json
+{
+  "id": 4,
+  "cmd": "set_process",
+  "params": { "process_key": "normal" }
+}
+```
+
+Response:
+
+```json
+{
+  "id": 4,
+  "code": "ok",
+  "message": "Successfully set the process",
+  "data": {
+    "process": "FELIX Plastic Normal @ 0.35mm",
+    "layer_height": 0.2
+  }
+}
+```
+
+`layer_height` comes from the selected profile. The value above is only an example.
+
+Errors: `invalid_parameters` (missing/empty key), `failed` (no printer set, unknown key, quality not available for this printer type, no matching system preset, process not compatible with the printer).
 
 ---
 
