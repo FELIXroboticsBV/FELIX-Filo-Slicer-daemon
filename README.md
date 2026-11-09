@@ -16,7 +16,23 @@ Communication happens through a local socket, which supports bidirectional (two-
 
 Messages are exchanged as JSON with standardized fields.
 
+## Results
+
+<p align="center">
+  <img width="600" src="./resources/readme_images/daemon-vs-orcagui.png.png" />
+</p>
+
+Comparison between slicing user the daemon (left) vs Orca 4.5 GUI (right).
+
+**Config**
+
+- FELIX Pro3 with 0.35 mm nozzle
+- normal quality
+
+As can be seen there is no difference in results.
+
 ### Request
+
 Request json composes of `id` field, `cmd` field and `params` field.
 
 - `id` : represents unique identifier for the request, client is responsible to provide the id to the server, thanks to this various requests can be easily identified.
