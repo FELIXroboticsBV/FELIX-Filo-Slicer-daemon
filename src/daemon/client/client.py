@@ -52,6 +52,9 @@ SHORTCUTS = {
     "process_normal": ("set_process", {"process_key": "normal"}),
     "process_coarse": ("set_process", {"process_key": "coarse"}),
 
+    "remove_model": ("remove_model" , {"model_key": MODEL}),
+    "remove_instance":("remove_instance" , {"model_key":MODEL, "instance_id": 0}),
+    
     "move":        ("set_transform", random_transform),
     "move_rotate": ("set_transform", lambda: random_transform(rotate=True)),
 

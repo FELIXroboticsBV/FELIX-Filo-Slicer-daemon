@@ -61,6 +61,20 @@ public:
     orca_response cmd_instantiate_object(const nlohmann::json& parameters);
 
     /**
+     * Removes model and all of its instances from the plate
+     * @param  {nlohmann::json} parameters : data received from the request
+     * @return {orca_response}             : parameters are going to be empty in this one
+     */
+    orca_response cmd_remove_model(const nlohmann::json& parameters);
+
+    /**
+     * Removes only the specific instance from the plate
+     * @param  {nlohmann::json} parameters : data received from the request
+     * @return {orca_response}             : parameters are going to be empty in this one
+     */
+    orca_response cmd_remove_instance(const nlohmann::json& parameters);
+
+    /**
      * Sets the printer that will be used for slicing
      * @param  {nlohmann::json} parameters : data received from the request
      * @return {orca_response}             : response from the orca slicer
