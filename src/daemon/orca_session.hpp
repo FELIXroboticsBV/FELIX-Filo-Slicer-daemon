@@ -25,6 +25,7 @@ namespace Slic3r {
 class Model;
 class PresetBundle;
 class Print;
+class ModelObject;
 } // namespace Slic3r
 
 namespace felix_daemon {
@@ -94,6 +95,13 @@ public:
     orca_response cmd_get_preset_info(const nlohmann::json& parameters);
 
     /**
+     * Sets position of the model on the plate
+     * @param  {nlohmann::json} parameters : data received from the request
+     * @return {orca_response}             : parameters are going to be empty in this one
+     */
+    orca_response cmd_set_transform(const nlohmann::json& parameters);
+
+    /**
      * Checks the status if the worker thread is busy with slicing
      * @return {bool}  : true if status is slicing false otherwise
      */
@@ -116,6 +124,8 @@ private:
 
 private:
     std::unordered_map<std::string, std::unique_ptr<Slic3r::Model>> m_meshCache;
+    std::unordered_map<std::string, Slic3r::ModelObject*> m_models;
+    std::unique_ptr<Slic3r::Model> m_plate;
     std::unique_ptr<Slic3r::PresetBundle> m_presetBundle;
     std::unique_ptr<Slic3r::Print> m_print;
 

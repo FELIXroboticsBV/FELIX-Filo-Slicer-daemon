@@ -8,6 +8,7 @@
 #include <boost/filesystem/path.hpp>
 #include <boost/filesystem.hpp>
 #include <json.hpp>
+#include <libslic3r/Point.hpp>
 
 namespace felix_daemon {
 using namespace nlohmann;
@@ -33,6 +34,38 @@ static float find_float(const json& j, const std::string& parameter)
     return it->get<float>();
 }
 
+static int find_int(const json& j, const std::string& parameter)
+{
+    auto it = j.find(parameter);
+    if (it == j.end() || !it->is_number())
+        throw std::invalid_argument("missing or invalid '" + parameter + "'");
+    return it->get<int>();
+}
+
+static Slic3r::Transform3d find_mat4(const json& j, const std::string& parameter)
+{
+    auto it = j.find(parameter);
+    if (it == j.end() || !it->is_array() || it->size() != 16)
+        throw std::invalid_argument("missing or invalid '" + parameter + "' (expected 16 numbers)");
+
+    Eigen::Matrix<double, 4, 4, Eigen::RowMajor> m;
+    for (int i = 0; i < 16; ++i) {
+        const auto& v = (*it)[i];
+        if (!v.is_number() || !std::isfinite(v.get<double>()))
+            throw std::invalid_argument("'" + parameter + "' must contain only finite numbers");
+        m(i / 4, i % 4) = v.get<double>();
+    }
+
+    if (!m.row(3).isApprox(Eigen::RowVector4d(0, 0, 0, 1)))
+        throw std::invalid_argument("'" + parameter + "' bottom row must be 0 0 0 1");
+    if (std::abs(m.topLeftCorner<3, 3>().determinant()) < 1e-9)
+        throw std::invalid_argument("'" + parameter + "' is degenerate (zero scale)");
+
+    Slic3r::Transform3d t;
+    t.matrix() = m;
+    return t;
+}
+
 struct cmdParameters
 {
     virtual ~cmdParameters()                   = default;
@@ -43,12 +76,7 @@ struct cmdLoadModel_Parameters : public cmdParameters
 {
     boost::filesystem::path path;
 
-    void parse(const json& parameters) override
-    {
-        path = find_string(parameters, "path");
-        if (!boost::filesystem::exists(path))
-            throw std::invalid_argument("model not found: " + path.string());
-    }
+    void parse(const json& parameters) override;
 };
 
 struct cmdSetPrinter_Parameters : public cmdParameters
@@ -56,13 +84,7 @@ struct cmdSetPrinter_Parameters : public cmdParameters
     std::string printer_key;
     float nozzle_size = 0.f;
 
-    void parse(const json& parameters) override
-    {
-        printer_key = find_string(parameters, "printer_key");
-        nozzle_size = find_float(parameters, "nozzle_size");
-        if (nozzle_size <= 0.f)
-            throw std::invalid_argument("'nozzle_size' must be greater than 0");
-    }
+    void parse(const json& parameters) override;
 };
 
 struct cmdSlice_Parameters : public cmdParameters
@@ -70,11 +92,7 @@ struct cmdSlice_Parameters : public cmdParameters
     std::string modelPath;  // from where the model was loaded (cache key)
     std::string outputPath; // where to store the g-code
 
-    void parse(const json& parameters) override
-    {
-        modelPath  = find_string(parameters, "modelPath");
-        outputPath = find_string(parameters, "outputPath");
-    }
+    void parse(const json& parameters) override;
 };
 
 struct cmdSetFilament_Parameters : public cmdParameters
@@ -83,18 +101,27 @@ struct cmdSetFilament_Parameters : public cmdParameters
     std::string nozzle_key;
     int extruder = 0;
 
-    void parse(const json& parameters) override
-    {
-        filament_key = find_string(parameters, "filament_key");
-        nozzle_key   = find_string(parameters, "nozzle_key");
-        extruder     = find_float(parameters, "extruder");
-    }
+    void parse(const json& parameters) override;
 };
 
 struct cmdSetProcess_Parameters : public cmdParameters
 {
     std::string process_key;
-    void parse(const json& parameters) override { process_key = find_string(parameters, "process_key"); }
+    void parse(const json& parameters) override;
+};
+
+struct cmdSetTransformParameters : public cmdParameters
+{
+    struct Item
+    {
+        Slic3r::Transform3d transform = Slic3r::Transform3d::Identity();
+        std::string model_key;
+        int instanceid = 0;
+    };
+
+    std::vector<Item> items;
+
+    void parse(const json& parameters) override;
 };
 
 } // namespace felix_daemon
