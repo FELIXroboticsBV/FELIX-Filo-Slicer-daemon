@@ -102,7 +102,7 @@ orca_response orca_session::cmd_load_model(const nlohmann::json& parameters)
 {
     // parse the parameters
     try {
-        cmdLoadModel_Parameters ctx;
+        Cmd_Load_Model_Parameters ctx;
         ctx.parse(parameters);
 
         BOOST_LOG_TRIVIAL(info) << "Loading the model \n \t path: " << ctx.path.string();
@@ -140,7 +140,7 @@ orca_response orca_session::cmd_load_model(const nlohmann::json& parameters)
 orca_response orca_session::cmd_instantiate_object(const nlohmann::json& parameters)
 {
     try {
-        cmdInstantiateModelParameters params;
+        Cmd_Instantiate_Model_Parameters params;
         params.parse(parameters);
 
         Slic3r::ModelObject* obj = find_model(params.model_key);
@@ -180,7 +180,7 @@ orca_response orca_session::cmd_set_printer(const nlohmann::json& parameters)
 {
     try {
         // parse the arguments
-        cmdSetPrinter_Parameters p;
+        Cmd_Set_Printer_Parameters p;
         p.parse(parameters);
 
         // builds the priset name so that orca can find it and app can just supply simplified keys
@@ -248,11 +248,15 @@ orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
             "Slicing is allready in progress, wait until slicing is finished, to see the status query slicing_status");
     }
     try {
-        cmdSlice_Parameters params;
+        Cmd_Slice_Parameters params;
         params.parse(parameters);
 
         if (m_plate->objects.empty()) {
             throw std::runtime_error("No model was loaded !, use cmd load model ");
+        }
+
+        if (m_printerKey.empty()) {
+            throw std::runtime_error("No printer loaded ! Can not slice without setting printer, call set_printer command");
         }
 
         // get the configuration of the printer (filament  etc etc )
@@ -364,7 +368,7 @@ Set filament
 orca_response orca_session::cmd_set_filament(const nlohmann::json& parameters)
 {
     try {
-        cmdSetFilament_Parameters p;
+        Cmd_Set_Filament_Parameters p;
         p.parse(parameters);
 
         if (m_printerKey.empty())
@@ -428,7 +432,7 @@ Set process
 orca_response orca_session::cmd_set_process(const nlohmann::json& parameters)
 {
     try {
-        cmdSetProcess_Parameters p;
+        Cmd_Set_Process_Parameters p;
         p.parse(parameters);
 
         if (m_printerKey.empty())
@@ -474,8 +478,8 @@ orca_response orca_session::cmd_get_preset_info(const nlohmann::json& parameters
         auto numExtruders   = nozzles->size();
 
         auto models = nlohmann::json::array();
-        for (const auto& [path, model] : m_models)
-            models.push_back(path);
+        for (const auto& [key, model] : m_models)
+            models.push_back({{"model_key", key}, {"instances", model->instances.size()}});
 
         json res_body;
         res_body["printer_key"]   = m_printerKey;
@@ -498,7 +502,7 @@ Set position
 orca_response orca_session::cmd_set_transform(const nlohmann::json& parameters)
 {
     try {
-        cmdSetTransformParameters params;
+        Cmd_Set_Transform_Parameters params;
         params.parse(parameters);
 
         std::vector<Slic3r::ModelInstance*> targets;
@@ -535,6 +539,88 @@ orca_response orca_session::cmd_set_transform(const nlohmann::json& parameters)
 
     } catch (std::exception& e) {
         return orca_error_response(orca_response_code::failed, e.what());
+    }
+}
+
+orca_response orca_session::cmd_remove_model(const nlohmann::json& parameters)
+{
+    if (is_slicing())
+        return orca_error_response(orca_response_code::busy, "Cannot remove a model while slicing, wait until slicing is finished");
+
+    try {
+        Cmd_Remove_Model_Parameters params;
+        params.parse(parameters);
+
+        auto it = m_models.find(params.model_key);
+        if (it == m_models.end())
+            return orca_error_response(orca_response_code::invalid_parameters, "unknown model_key: " + params.model_key);
+
+        Slic3r::ModelObject* obj      = it->second;
+        const size_t removedInstances = obj->instances.size();
+
+        m_models.erase(it);
+
+        // deletes the object with all of its instances and volumes
+        if (!m_plate->delete_object(obj))
+            return orca_error_response(orca_response_code::failed, "model was not found on the plate: " + params.model_key);
+
+        json res_body;
+        res_body["model_key"]         = params.model_key;
+        res_body["removed_instances"] = removedInstances;
+        res_body["remaining_models"]  = m_models.size();
+
+        return orca_success_response("Successfully removed the model", res_body);
+
+    } catch (std::exception& e) {
+        return orca_error_response(orca_response_code::invalid_parameters, e.what());
+    }
+}
+
+orca_response orca_session::cmd_remove_instance(const nlohmann::json& parameters)
+{
+    if (is_slicing())
+        return orca_error_response(orca_response_code::busy, "Cannot remove an instance while slicing, wait until slicing is finished");
+
+    try {
+        Cmd_Delete_Instance_Parameters params;
+        params.parse(parameters);
+
+        auto it = m_models.find(params.model_key);
+        if (it == m_models.end())
+            return orca_error_response(orca_response_code::invalid_parameters, "unknown model_key: " + params.model_key);
+
+        Slic3r::ModelObject* obj = it->second;
+        const size_t index       = static_cast<size_t>(params.instanceID);
+
+        if (index >= obj->instances.size())
+            return orca_error_response(orca_response_code::invalid_parameters, "instance " + std::to_string(index) + " out of range for " +
+                                                                                   params.model_key + " (model has " +
+                                                                                   std::to_string(obj->instances.size()) + ")");
+
+        json res_body;
+        res_body["model_key"] = params.model_key;
+        res_body["instance"]  = index;
+
+        // last instance, an object without instances is invalid, so remove the whole model
+        if (obj->instances.size() == 1) {
+            m_models.erase(it);
+            if (!m_plate->delete_object(obj))
+                return orca_error_response(orca_response_code::failed, "model was not found on the plate: " + params.model_key);
+
+            res_body["count"]         = 0;
+            res_body["model_removed"] = true;
+            return orca_success_response("Removed the last instance, model was removed from the plate", res_body);
+        }
+
+        obj->delete_instance(index);
+        obj->invalidate_bounding_box();
+
+        res_body["count"]         = obj->instances.size();
+        res_body["model_removed"] = false;
+        return orca_success_response("Successfully removed the instance", res_body);
+
+    } catch (std::exception& e) {
+        return orca_error_response(orca_response_code::invalid_parameters, e.what());
     }
 }
 

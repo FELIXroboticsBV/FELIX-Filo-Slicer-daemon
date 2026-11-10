@@ -50,6 +50,8 @@ router::router(orca_session& orca_session)
     m_commands.emplace("slice", [s = &orca_session](const json& p) { return s->cmd_slice(p); });
     m_commands.emplace("slice_status", [s = &orca_session](const json& p) { return s->cmd_check_slice_progress(p); });
     m_commands.emplace("get_state", [s = &orca_session](const json& p) { return s->cmd_get_preset_info(p); });
+    m_commands.emplace("remove_model", [s = &orca_session](const json& p) { return s->cmd_remove_model(p); });
+    m_commands.emplace("remove_instance", [s = &orca_session](const json& p) { return s->cmd_remove_instance(p); });
 }
 
 next_action router::operator()(int client_fd)
