@@ -497,7 +497,7 @@ orca_response orca_session::cmd_get_preset_info(const nlohmann::json& parameters
 }
 
 /*******************************************************************************
-Set position
+Set transformation (position, rotation and scale)
 ********************************************************************************/
 orca_response orca_session::cmd_set_transform(const nlohmann::json& parameters)
 {
@@ -542,6 +542,9 @@ orca_response orca_session::cmd_set_transform(const nlohmann::json& parameters)
     }
 }
 
+/*******************************************************************************
+Remove model
+********************************************************************************/
 orca_response orca_session::cmd_remove_model(const nlohmann::json& parameters)
 {
     if (is_slicing())
@@ -576,6 +579,9 @@ orca_response orca_session::cmd_remove_model(const nlohmann::json& parameters)
     }
 }
 
+/*******************************************************************************
+Remove instance
+********************************************************************************/
 orca_response orca_session::cmd_remove_instance(const nlohmann::json& parameters)
 {
     if (is_slicing())
