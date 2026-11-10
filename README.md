@@ -26,8 +26,9 @@ Comparison between slicing using the daemon (left) vs Orca 2.5 GUI (right).
 
 **Config**
 
-- FELIX Pro3 with 0.35 mm nozzle
-- normal quality
+- FELIX Pro 3 with 0.35 mm nozzle
+- normal quality (0.2 layer height)
+- tree support structure
 
 As can be seen there is no difference in results.
 
