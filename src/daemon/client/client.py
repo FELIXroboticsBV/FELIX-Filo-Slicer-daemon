@@ -17,6 +17,8 @@ import json
 import socket
 import sys
 import threading
+import math
+import random
 from pathlib import Path
 
 DEFAULT_SOCKET = "/run/user/1000/felix-daemon"
@@ -25,6 +27,19 @@ DEFAULT_SOCKET = "/run/user/1000/felix-daemon"
 ASSETS = Path(__file__).resolve().parent / "assets"
 MODEL  = str(ASSETS / "dino.stl")
 GCODE  = str(ASSETS / "dino.gcode")
+
+def random_transform(model_key=MODEL, instance=1, lo=20.0, hi=200.0, rotate=False):
+    x = random.uniform(lo, hi)
+    y = random.uniform(lo, hi)
+    a = random.uniform(0, 2 * math.pi) if rotate else 0.0
+    c, s = math.cos(a), math.sin(a)
+    # classic model matrix, notice only x and y components are transformed
+    matrix = [c, -s, 0, x,
+              s,  c, 0, y,
+              0,  0, 1, 0,
+              0,  0, 0, 1]
+    return {"objects": [{"model_key": model_key, "instance_id": instance, "transform": matrix}]}
+
 
 SHORTCUTS = {
     "load":    ("load_model",  {"path": MODEL}),
@@ -36,18 +51,29 @@ SHORTCUTS = {
 
     "process_normal": ("set_process", {"process_key": "normal"}),
     "process_coarse": ("set_process", {"process_key": "coarse"}),
+
+    "move":        ("set_transform", random_transform),
+    "move_rotate": ("set_transform", lambda: random_transform(rotate=True)),
+
+    "add_instance" : ("add_instance", {"model_key": MODEL}),
     
     "slice":   ("slice",       {"modelPath": MODEL, "outputPath": GCODE}),
     "status":  ("slice_status",  {}),
     "info": ("get_state", {}),
+
+
 }
 SEQUENCES = {
     "all": ["load", "printer", "filament", "process_normal", "slice"],
 }
 
+
+
 def run_shortcut(client, name, timeout):
     for step in SEQUENCES.get(name, [name]):
         cmd, params = SHORTCUTS[step]
+        if callable(params):
+            params = params()
         reply = client.request(cmd, params, timeout)
         if not reply or "error" in reply:
             return reply
@@ -59,7 +85,8 @@ def print_help():
     print("  quit / exit          leave the client")
     print("Shortcuts:")
     for name, (cmd, params) in SHORTCUTS.items():
-        print(f"  {name:<20} {cmd} {json.dumps(params)}")
+        shown = "<generated>" if callable(params) else json.dumps(params)
+        print(f"  {name:<20} {cmd} {shown}")
     for name, steps in SEQUENCES.items():
         print(f"  {name:<20} runs: {' -> '.join(steps)}")
     print("Manual:")

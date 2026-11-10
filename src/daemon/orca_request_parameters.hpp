@@ -124,4 +124,12 @@ struct cmdSetTransformParameters : public cmdParameters
     void parse(const json& parameters) override;
 };
 
+struct cmdInstantiateModelParameters : public cmdParameters
+{
+    std::string model_key;
+    std::optional<Slic3r::Transform3d> transform;
+
+    void parse(const json& parameters) override;
+};
+
 } // namespace felix_daemon

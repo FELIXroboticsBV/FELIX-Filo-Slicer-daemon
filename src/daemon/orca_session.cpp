@@ -49,6 +49,8 @@ orca_session::orca_session() : m_presetBundle(std::make_unique<Slic3r::PresetBun
         }
         BOOST_LOG_TRIVIAL(info) << "Slicing progress \n \t percentage: " << m_progress.percentage << "\n \t msg: " << m_progress.message;
     });
+
+    m_plate = std::make_unique<Slic3r::Model>();
 }
 
 void orca_session::set_state(orca_state new_state)
@@ -59,6 +61,12 @@ void orca_session::set_state(orca_state new_state)
         m_progress = {};
     }
     m_progress.state = new_state;
+}
+
+Slic3r::ModelObject* orca_session::find_model(const std::string& model_key)
+{
+    auto it = m_models.find(model_key);
+    return it == m_models.end() ? nullptr : it->second;
 }
 
 const char* to_string(orca_state s)
@@ -97,21 +105,68 @@ orca_response orca_session::cmd_load_model(const nlohmann::json& parameters)
         cmdLoadModel_Parameters ctx;
         ctx.parse(parameters);
 
-        BOOST_LOG_TRIVIAL(info) << "Loading the model \n \t path: ", ctx.path.string();
+        BOOST_LOG_TRIVIAL(info) << "Loading the model \n \t path: " << ctx.path.string();
 
-        auto model = std::make_unique<Slic3r::Model>(Slic3r::Model::read_from_file(ctx.path.string()));
-        if (model->objects.empty())
+        auto loaded = Slic3r::Model::read_from_file(ctx.path.string());
+        if (loaded.objects.empty())
             return orca_error_response(orca_response_code::failed, "file contains no objects: " + ctx.path.string());
 
+        std::vector<std::string> ids;
+        for (size_t i = 0; i < loaded.objects.size(); ++i) {
+            std::string id = loaded.objects.size() == 1 ? ctx.path.string() : ctx.path.string() + ":" + std::to_string(i);
+            ids.push_back(std::move(id));
+        }
+
         nlohmann::json res_body = nlohmann::json::array();
-        for (const Slic3r::ModelObject* obj : model->objects) {
+        for (size_t i = 0; i < loaded.objects.size(); ++i) {
+            Slic3r::ModelObject* obj = m_plate->add_object(*loaded.objects[i]); // deep copy into the plate
+            if (obj->instances.empty())
+                obj->add_instance();
+
+            m_models[ids[i]] = obj;
+
             const Slic3r::BoundingBoxf3 bb = obj->raw_mesh_bounding_box();
-            res_body.push_back({{"name", obj->name},
+            res_body.push_back({{"model_key", ids[i]},
+                                {"name", obj->name},
                                 {"bbox", {{"min", {bb.min.x(), bb.min.y(), bb.min.z()}}, {"max", {bb.max.x(), bb.max.y(), bb.max.z()}}}}});
         }
-        m_meshCache[ctx.path.string()] = std::move(model);
+        return orca_success_response("Successfully loaded the model", res_body);
 
-        return orca_success_response("Successfully loaded hte model !", res_body);
+    } catch (std::exception& e) {
+        return orca_error_response(orca_response_code::invalid_parameters, e.what());
+    }
+}
+
+orca_response orca_session::cmd_instantiate_object(const nlohmann::json& parameters)
+{
+    try {
+        cmdInstantiateModelParameters params;
+        params.parse(parameters);
+
+        Slic3r::ModelObject* obj = find_model(params.model_key);
+        if (!obj)
+            return orca_error_response(orca_response_code::invalid_parameters, "unknown model_key: " + params.model_key);
+
+        if (params.transform.has_value()) {
+            auto inst = obj->add_instance();
+            inst->set_transformation(Slic3r::Geometry::Transformation(params.transform.value()));
+        } else {
+            obj->add_instance(*obj->instances.front());
+        }
+
+        obj->invalidate_bounding_box();
+
+        const size_t index = obj->instances.size() - 1;
+        const auto bb      = obj->instance_bounding_box(index);
+
+        json res_body;
+        res_body["model_key"] = params.model_key;
+        res_body["instance"]  = index;
+        res_body["count"]     = obj->instances.size();
+        res_body["bbox_min"]  = {bb.min.x(), bb.min.y(), bb.min.z()};
+        res_body["bbox_max"]  = {bb.max.x(), bb.max.y(), bb.max.z()};
+
+        return orca_success_response("Successfully added an instance", res_body);
 
     } catch (std::exception& e) {
         return orca_error_response(orca_response_code::invalid_parameters, e.what());
@@ -196,25 +251,13 @@ orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
         cmdSlice_Parameters params;
         params.parse(parameters);
 
-        auto it = m_meshCache.find(params.modelPath);
-        if (it == m_meshCache.end())
-            throw std::invalid_argument("unknown model_id");
-        if (m_printerPreset.empty())
-            throw std::runtime_error("no printer set, first set the printer with set_printer command");
+        if (m_plate->objects.empty()) {
+            throw std::runtime_error("No model was loaded !, use cmd load model ");
+        }
 
-        // get the correct model
-        auto& model = *it->second;
         // get the configuration of the printer (filament  etc etc )
         const auto& printerCfg = m_presetBundle->printers.get_edited_preset().config;
         auto fullConfig        = m_presetBundle->full_config();
-
-        // get the printer bed and create an object on it
-        Slic3r::BoundingBoxf bedBox(printerCfg.option<Slic3r::ConfigOptionPoints>("printable_area")->values);
-        model.add_default_instances();
-        model.center_instances_around_point(bedBox.center());
-        for (auto* obj : model.objects) {
-            obj->ensure_on_bed();
-        }
 
         // adjust the filament list to take into the account double sided printers
         felix_daemon::utils::sync_filament_self_index(*m_presetBundle, fullConfig);
@@ -225,7 +268,7 @@ orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
         }
 
         // apply the configuration to the model
-        auto applyStatus = m_print->apply(model, fullConfig);
+        auto applyStatus = m_print->apply(*m_plate, fullConfig);
         m_print->invalidate_gcode_export_from_worker();
 
         // nothing has changed
@@ -249,12 +292,11 @@ orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
 
         felix_daemon::utils::sync_filament_self_index(*m_presetBundle, fullConfig);
 
-        set_state(orca_state::slicing);
-
         Slic3r::StringObjectException err = m_print->validate();
         if (!err.string.empty()) {
             return orca_error_response(orca_response_code::failed, err.string);
         }
+        set_state(orca_state::slicing);
 
         //===================================================================================================================
         // Actual slicing happens here
@@ -432,7 +474,7 @@ orca_response orca_session::cmd_get_preset_info(const nlohmann::json& parameters
         auto numExtruders   = nozzles->size();
 
         auto models = nlohmann::json::array();
-        for (const auto& [path, model] : m_meshCache)
+        for (const auto& [path, model] : m_models)
             models.push_back(path);
 
         json res_body;
@@ -453,7 +495,6 @@ orca_response orca_session::cmd_get_preset_info(const nlohmann::json& parameters
 /*******************************************************************************
 Set position
 ********************************************************************************/
-/*
 orca_response orca_session::cmd_set_transform(const nlohmann::json& parameters)
 {
     try {
@@ -463,17 +504,38 @@ orca_response orca_session::cmd_set_transform(const nlohmann::json& parameters)
         std::vector<Slic3r::ModelInstance*> targets;
         targets.reserve(params.items.size());
 
+        // validate all instances onto which transformation can be applied
         for (const auto& item : params.items) {
-            Slic3r::ModelObject* obj = find_object(item.model_key); // your id -> ModelObject* lookup
-            if (!obj)
-            throw std::invalid_argument("unknown object_id: " + it.object_id);
-            if (it.instance >= (int) obj->instances.size())
-                throw std::invalid_argument("instance out of range for: " + it.object_id);
-                targets.push_back(obj->instances[it.instance]);
+            Slic3r::ModelObject* obj = find_model(item.model_key);
+            if (obj) {
+                if (item.instanceid >= (int) obj->instances.size()) {
+                    throw std::invalid_argument("instance out of range for: " + item.model_key);
+                }
+                targets.push_back(obj->instances[item.instanceid]);
+            } else {
+                throw std::runtime_error("Model not found \n \t key: " + item.model_key);
             }
         }
+
+        // apply the transformation
+        nlohmann::json res_body = nlohmann::json::array();
+        for (size_t i = 0; i < targets.size(); ++i) {
+            Slic3r::ModelInstance* inst = targets[i];
+            Slic3r::ModelObject* obj    = inst->get_object();
+
+            inst->set_transformation(Slic3r::Geometry::Transformation(params.items[i].transform));
+            obj->invalidate_bounding_box();
+
+            const auto bb = obj->instance_bounding_box(params.items[i].instanceid);
+            res_body.push_back({{"model_key", params.items[i].model_key},
+                                {"bbox_min", {bb.min.x(), bb.min.y(), bb.min.z()}},
+                                {"bbox_max", {bb.max.x(), bb.max.y(), bb.max.z()}}});
+        }
+        return orca_success_response("Successfully set the transforms", res_body);
+
+    } catch (std::exception& e) {
+        return orca_error_response(orca_response_code::failed, e.what());
     }
-    catch (std::exception& e) { return orca_error_response(orca_response_code::failed, e.what()); }
 }
-*/
+
 } // namespace felix_daemon

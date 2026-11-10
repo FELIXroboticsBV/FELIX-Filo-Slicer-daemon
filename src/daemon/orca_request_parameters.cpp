@@ -39,9 +39,20 @@ void cmdSetTransformParameters::parse(const json& parameters)
 
     for (const auto& obj : parameters["objects"]) {
         Item item;
-        item.model_key  = find_string(parameters, "model_key");
-        item.instanceid = find_int(parameters, "instance_id");
-        item.transform  = find_mat4(parameters, "transform");
+        item.model_key  = find_string(obj, "model_key");
+        item.instanceid = find_int(obj, "instance_id");
+        item.transform  = find_mat4(obj, "transform");
+
+        items.push_back(item);
+    }
+}
+
+void cmdInstantiateModelParameters::parse(const json& parameters)
+{
+    model_key = find_string(parameters, "model_key");
+
+    if (parameters.contains("transform")) {
+        transform = find_mat4(parameters, "transform");
     }
 }
 

@@ -18,6 +18,7 @@
 #include "orca_response.hpp"
 #include <boost/filesystem/path.hpp>
 #include <json_fwd.hpp>
+#include <libslic3r/Model.hpp>
 #include <mutex>
 #include <thread>
 
@@ -51,6 +52,13 @@ public:
      * @return {nlohmann::json}            : body of the response
      */
     orca_response cmd_load_model(const nlohmann::json& parameters);
+
+    /**
+     * Cerates new instance of hte model
+     * @param  {nlohmann::json} parameters : data received from the request
+     * @return {orca_response}             : body of the response
+     */
+    orca_response cmd_instantiate_object(const nlohmann::json& parameters);
 
     /**
      * Sets the printer that will be used for slicing
@@ -101,6 +109,9 @@ public:
      */
     orca_response cmd_set_transform(const nlohmann::json& parameters);
 
+    ~orca_session();
+
+private:
     /**
      * Checks the status if the worker thread is busy with slicing
      * @return {bool}  : true if status is slicing false otherwise
@@ -113,19 +124,12 @@ public:
      */
     void set_state(orca_state new_state);
 
-    ~orca_session();
+    Slic3r::ModelObject* find_model(const std::string& model_key);
 
 private:
-    /**
-     * All functionality that must happen on the separate thread
-     * @param  {std::string} output_path : where the final g-code will be put
-     */
-    void slice_worker(std::string output_path);
-
-private:
-    std::unordered_map<std::string, std::unique_ptr<Slic3r::Model>> m_meshCache;
     std::unordered_map<std::string, Slic3r::ModelObject*> m_models;
     std::unique_ptr<Slic3r::Model> m_plate;
+
     std::unique_ptr<Slic3r::PresetBundle> m_presetBundle;
     std::unique_ptr<Slic3r::Print> m_print;
 
