@@ -416,6 +416,113 @@ Response:
 }
 ```
 
+### `add_instance`
+
+Adds an instance (copy) of a loaded object to the plate.
+
+| param       | type       | required | description                   |
+| ----------- | ---------- | -------- | ----------------------------- |
+| `model_key` | string     | yes      | key returned by `load_model`  |
+| `transform` | 4×4 matrix | no       | transform of the new instance |
+
+Without `transform`, the new instance copies the transform of the first instance, so it sits in the same spot. Move it with `set_transform`.
+
+Request:
+
+```json
+{
+  "id": 7,
+  "cmd": "add_instance",
+  "params": {
+    "model_key": "/home/user/models/cube.stl",
+    "transform": [
+      [1, 0, 0, 50],
+      [0, 1, 0, 50],
+      [0, 0, 1, 0],
+      [0, 0, 0, 1]
+    ]
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "id": 7,
+  "code": "ok",
+  "message": "Successfully added an instance",
+  "data": {
+    "model_key": "/home/user/models/cube.stl",
+    "instance": 1,
+    "count": 2,
+    "bbox_min": [40, 40, 0],
+    "bbox_max": [60, 60, 20]
+  }
+}
+```
+
+`instance` is the index of the new instance and `count` is the total number of instances of this object. The bounding box is in plate coordinates.
+
+Errors: `invalid_parameters` (missing or unknown `model_key`, malformed `transform`).
+
+---
+
+### `set_transform`
+
+Sets the transform of one or more instances. All entries are checked first, so if any entry is invalid, nothing is changed.
+
+| param                   | type       | required | description                          |
+| ----------------------- | ---------- | -------- | ------------------------------------ |
+| `objects`               | array      | yes      | non-empty list of entries            |
+| `objects[].model_key`   | string     | yes      | key returned by `load_model`         |
+| `objects[].instance_id` | integer    | yes      | instance index, `0` is the first one |
+| `objects[].transform`   | 4×4 matrix | yes      | new transform of the instance        |
+
+Request:
+
+```json
+{
+  "id": 8,
+  "cmd": "set_transform",
+  "params": {
+    "objects": [
+      {
+        "model_key": "/home/user/models/cube.stl",
+        "instance_id": 0,
+        "transform": [
+          [1, 0, 0, 100],
+          [0, 1, 0, 100],
+          [0, 0, 1, 0],
+          [0, 0, 0, 1]
+        ]
+      }
+    ]
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "id": 8,
+  "code": "ok",
+  "message": "Successfully set the transforms",
+  "data": [
+    {
+      "model_key": "/home/user/models/cube.stl",
+      "bbox_min": [90, 90, 0],
+      "bbox_max": [110, 110, 20]
+    }
+  ]
+}
+```
+
+`data` is in the same order as `objects`. The bounding boxes are in plate coordinates.
+
+Errors: `failed` (empty or missing `objects`, unknown `model_key`, `instance_id` out of range, malformed `transform`).
+
 # Building
 
 Only the daemon is built, not the full OrcaSlicer application. This takes two steps: build Orca's dependencies once, then build the `orca-daemon` target with the CMake preset.

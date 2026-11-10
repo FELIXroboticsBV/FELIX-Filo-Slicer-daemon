@@ -42,6 +42,8 @@ struct request
 router::router(orca_session& orca_session)
 {
     m_commands.emplace("load_model", [s = &orca_session](const json& p) { return s->cmd_load_model(p); });
+    m_commands.emplace("add_instance", [s = &orca_session](const json& p) { return s->cmd_instantiate_object(p); });
+    m_commands.emplace("set_transform", [s = &orca_session](const json& p) { return s->cmd_set_transform(p); });
     m_commands.emplace("set_printer", [s = &orca_session](const json& p) { return s->cmd_set_printer(p); });
     m_commands.emplace("set_filament", [s = &orca_session](const json& p) { return s->cmd_set_filament(p); });
     m_commands.emplace("set_process", [s = &orca_session](const json& p) { return s->cmd_set_process(p); });
