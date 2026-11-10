@@ -255,6 +255,10 @@ orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
             throw std::runtime_error("No model was loaded !, use cmd load model ");
         }
 
+        if (m_printerKey.empty()) {
+            throw std::runtime_error("No printer loaded ! Can not slice without setting printer, call set_printer command");
+        }
+
         // get the configuration of the printer (filament  etc etc )
         const auto& printerCfg = m_presetBundle->printers.get_edited_preset().config;
         auto fullConfig        = m_presetBundle->full_config();
@@ -474,8 +478,8 @@ orca_response orca_session::cmd_get_preset_info(const nlohmann::json& parameters
         auto numExtruders   = nozzles->size();
 
         auto models = nlohmann::json::array();
-        for (const auto& [path, model] : m_models)
-            models.push_back(path);
+        for (const auto& [key, model] : m_models)
+            models.push_back({{"model_key", key}, {"instances", model->instances.size()}});
 
         json res_body;
         res_body["printer_key"]   = m_printerKey;
