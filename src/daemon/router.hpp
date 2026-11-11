@@ -19,6 +19,7 @@
 #include <json_fwd.hpp>
 #include <optional>
 #include <string>
+#include <sys/types.h>
 #include "response.hpp"
 #include "orca_response.hpp"
 
@@ -39,10 +40,10 @@ public:
 private:
     /**
      * Checks if read() system call actually read the entire message
-     * @param  {size_t} n : size that was read by read() command
-     * @return {bool}     : true if entire entire request was read
+     * @param  {ssize_t} n : value returned by the read() call
+     * @return {bool}      : true if data was read, false on EOF or error
      */
-    bool was_read_successful(size_t n);
+    bool was_read_successful(ssize_t n);
 
     /**
      * Processes the request issued from the client and sends
@@ -68,12 +69,18 @@ private:
 
     /**
      * Creates error server response
-     * USAGE: safe_send(client_fd, error(id, e.what().stringify()))
-     * @param  {int} id           : client file descriptor
-     * @param  {std::string} what : error message that you want to send
-     * @return {server_response}  : server_response object
+     * USAGE: safe_send(client_fd, error(id, response_code::user_error, e.what()).stringify())
+     * @param  {int} id             : id of the message that generated this message
+     * @param  {response_code} code : code sent to the client
+     * @param  {std::string} what   : error message that you want to send
+     * @return {server_response}    : server_response object
      */
-    server_response error(int id, const std::string& what);
+    server_response error(int id, response_code code, const std::string& what);
+
+    /**
+     * Maps the result code of an orca_session command to the code sent to the client
+     */
+    static response_code to_response_code(orca_response_code code);
 
     /**
      *  Creates success / ok server response

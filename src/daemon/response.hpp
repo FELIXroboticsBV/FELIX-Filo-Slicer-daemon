@@ -16,10 +16,10 @@ enum class next_action { keep_running, shutdown };
 
 enum class response_code {
     ok           = 200,
-    not_found    = 404,
     user_error   = 400,
+    not_found    = 404,
+    busy         = 409,
     server_error = 500,
-
 };
 
 struct server_response

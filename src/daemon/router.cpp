@@ -9,8 +9,11 @@
 #include "boost/log/trivial.hpp"
 #include "orca_session.hpp"
 #include <json_fwd.hpp>
+#include <cerrno>
+#include <cstring>
 #include <stdexcept>
 #include <sys/socket.h>
+#include <unistd.h>
 
 namespace felix_daemon {
 
@@ -83,8 +86,7 @@ next_action router::operator()(int client_fd)
         }
     }
 
-    auto shouldClose = handle_message(client_fd, pending);
-    if (!pending.empty() && shouldClose)
+    if (!pending.empty() && handle_message(client_fd, pending))
         return next_action::shutdown;
 
     return next_action::keep_running;
@@ -109,29 +111,45 @@ void router::process_request(int client_fd, const std::string& msg)
     try {
         src = json::parse(msg);
     } catch (const json::parse_error& e) {
-        safe_send(client_fd, error(-1, e.what()).stringify());
+        safe_send(client_fd, error(-1, response_code::user_error, e.what()).stringify());
+        return;
     }
 
-    int id = (src.contains("id") && src["id"].is_number_integer()) ? src["id"].get<int>() : 0;
+    int id = (src.is_object() && src.contains("id") && src["id"].is_number_integer()) ? src["id"].get<int>() : 0;
     try {
         request req(src);
 
         auto action = m_commands.find(req.cmd);
         if (action == m_commands.end()) {
-            throw std::invalid_argument("Unknow command : " + req.cmd);
+            safe_send(client_fd, error(id, response_code::not_found, "Unknown command: " + req.cmd).stringify());
+            return;
         }
         auto response = action->second(req.params);
 
         if (response.failed) {
-            safe_send(client_fd, error(id, response.message).stringify());
+            safe_send(client_fd, error(id, to_response_code(response.code), response.message).stringify());
         } else {
             auto body = response.json.value_or({});
             safe_send(client_fd, success(id, response.message, body).stringify());
         }
 
+    } catch (const std::invalid_argument& e) {
+        safe_send(client_fd, error(id, response_code::user_error, e.what()).stringify());
     } catch (const std::exception& e) {
-        safe_send(client_fd, error(id, e.what()).stringify());
+        safe_send(client_fd, error(id, response_code::server_error, e.what()).stringify());
     }
+}
+
+response_code router::to_response_code(orca_response_code code)
+{
+    switch (code) {
+    case orca_response_code::ok: return response_code::ok;
+    case orca_response_code::invalid_parameters: return response_code::user_error;
+    case orca_response_code::not_found: return response_code::not_found;
+    case orca_response_code::busy: return response_code::busy;
+    case orca_response_code::failed: return response_code::server_error;
+    }
+    return response_code::server_error;
 }
 
 void router::safe_send(int client_fd, const std::string& msg)
@@ -153,7 +171,7 @@ void router::safe_send(int client_fd, const std::string& msg)
     }
 }
 
-bool router::was_read_successful(size_t n)
+bool router::was_read_successful(ssize_t n)
 {
     if (n == 0) {
         BOOST_LOG_TRIVIAL(warning) << "Client have closed the connection ";
@@ -163,18 +181,18 @@ bool router::was_read_successful(size_t n)
         // EINTR here means SIGINT/SIGTERM arrived: return and let the server decide.
         if (errno != EINTR)
             BOOST_LOG_TRIVIAL(error) << "read() failed: " << std::strerror(errno);
-        return true;
+        return false;
     }
     return true;
 }
 
-server_response router::error(int id, const std::string& what)
+server_response router::error(int id, response_code code, const std::string& what)
 {
     BOOST_LOG_TRIVIAL(error) << what;
 
     nlohmann::json resp;
     resp["what"] = what;
-    return {id, next_action::keep_running, response_code::server_error, resp, what};
+    return {id, next_action::keep_running, code, resp, what};
 }
 
 server_response router::success(int id, const std::string& msg, json& body)

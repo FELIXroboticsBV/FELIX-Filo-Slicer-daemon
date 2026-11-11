@@ -1,8 +1,13 @@
 import itertools, json, os, shlex, socket, subprocess, time
 import pytest
 
-SOCKET_PATH = "/run/user/1000/felix-daemon"
+REPO_ROOT   = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+SOCKET_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "felix-daemon")
+# set to "" to test against a daemon that is already running
 DAEMON_CMD  = "./out/build/orca-daemon-relwithdebinfo/src/daemon/orca-daemon"
+
+# response codes, see response_code in response.hpp
+OK, BAD_REQUEST, NOT_FOUND, BUSY, SERVER_ERROR = 200, 400, 404, 409, 500
 
 
 class DaemonClient:
@@ -15,19 +20,23 @@ class DaemonClient:
     def call(self, cmd, **params):
         """Send a request and return the full response."""
         req_id = next(self.ids)
-        self.file.write((json.dumps({"id": req_id, "cmd": cmd, "params": params}) + "\n").encode())
-        self.file.flush()
-        line = self.file.readline()
-        if not line:
-            raise ConnectionError("daemon closed the connection")
-        resp = json.loads(line)
+        resp = self.raw(json.dumps({"id": req_id, "cmd": cmd, "params": params}))
         assert resp["id"] == req_id, f"response id {resp['id']} != request id {req_id}"
         return resp
+
+    def raw(self, line):
+        """Send one line exactly as given and return the response."""
+        self.file.write((line + "\n").encode())
+        self.file.flush()
+        reply = self.file.readline()
+        if not reply:
+            raise ConnectionError("daemon closed the connection")
+        return json.loads(reply)
 
     def ok(self, cmd, **params):
         """Send a request, assert it succeeded and return its data."""
         resp = self.call(cmd, **params)
-        assert resp["code"] == 200, f"{cmd} -> {resp['code']}: {resp.get('message')}"
+        assert resp["code"] == OK, f"{cmd} -> {resp['code']}: {resp.get('error')}"
         return resp.get("data")
 
     def wait_for_slice(self, timeout=120):
@@ -62,7 +71,7 @@ def client():
     if DAEMON_CMD:
         if os.path.exists(SOCKET_PATH):
             os.remove(SOCKET_PATH)  # stale socket from a crashed run
-        proc = subprocess.Popen(shlex.split(DAEMON_CMD))
+        proc = subprocess.Popen(shlex.split(DAEMON_CMD), cwd=REPO_ROOT)
 
     c = _connect(SOCKET_PATH, proc)
     yield c

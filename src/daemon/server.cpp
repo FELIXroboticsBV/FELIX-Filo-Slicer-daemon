@@ -86,7 +86,7 @@ void server::start()
     while (_running && !g_stopRequested) {
         // wait until the client connects
         int client_fd = accept(_server_fd, nullptr, nullptr);
-        if (client_fd == 0)
+        if (client_fd < 0) // EINTR from a stop signal, or a transient accept() error
             continue;
 
         BOOST_LOG_TRIVIAL(info) << "Client connected";

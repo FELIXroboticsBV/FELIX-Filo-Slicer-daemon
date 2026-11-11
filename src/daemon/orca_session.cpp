@@ -158,11 +158,13 @@ orca_response orca_session::cmd_instantiate_object(const nlohmann::json& paramet
 
         const size_t index = obj->instances.size() - 1;
         const auto bb      = obj->instance_bounding_box(index);
+        const auto pos     = obj->instances[index]->get_offset();
 
         json res_body;
         res_body["model_key"] = params.model_key;
         res_body["instance"]  = index;
         res_body["count"]     = obj->instances.size();
+        res_body["position"]  = {pos.x(), pos.y(), pos.z()};
         res_body["bbox_min"]  = {bb.min.x(), bb.min.y(), bb.min.z()};
         res_body["bbox_max"]  = {bb.max.x(), bb.max.y(), bb.max.z()};
 
@@ -302,6 +304,9 @@ orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
         }
         set_state(orca_state::slicing);
 
+        // the previous g-code no longer matches the print, it is only reused once this slice succeeds
+        m_lastOutput.clear();
+
         //===================================================================================================================
         // Actual slicing happens here
         // it is in the lambda expression, function continues on the main thread while lambda happens on the separate thread
@@ -317,6 +322,8 @@ orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
                 m_progress.state      = orca_state::done;
                 m_progress.percentage = 100;
                 m_progress.output     = written;
+                // only read by cmd_slice after joining this thread
+                m_lastOutput = written;
 
             } catch (const Slic3r::CanceledException&) {
                 std::lock_guard<std::mutex> lock(m_slicingMutex);
@@ -475,7 +482,7 @@ orca_response orca_session::cmd_get_preset_info(const nlohmann::json& parameters
         auto process   = m_presetBundle->prints.get_selected_preset_name();
 
         const auto* nozzles = m_presetBundle->printers.get_selected_preset().config.option<Slic3r::ConfigOptionFloats>("nozzle_diameter");
-        auto numExtruders   = nozzles->size();
+        auto numExtruders   = nozzles ? nozzles->size() : 0;
 
         auto models = nlohmann::json::array();
         for (const auto& [key, model] : m_models)
@@ -512,7 +519,7 @@ orca_response orca_session::cmd_set_transform(const nlohmann::json& parameters)
         for (const auto& item : params.items) {
             Slic3r::ModelObject* obj = find_model(item.model_key);
             if (obj) {
-                if (item.instanceid >= (int) obj->instances.size()) {
+                if (item.instanceid < 0 || item.instanceid >= (int) obj->instances.size()) {
                     throw std::invalid_argument("instance out of range for: " + item.model_key);
                 }
                 targets.push_back(obj->instances[item.instanceid]);
@@ -530,15 +537,18 @@ orca_response orca_session::cmd_set_transform(const nlohmann::json& parameters)
             inst->set_transformation(Slic3r::Geometry::Transformation(params.items[i].transform));
             obj->invalidate_bounding_box();
 
-            const auto bb = obj->instance_bounding_box(params.items[i].instanceid);
+            const auto bb  = obj->instance_bounding_box(params.items[i].instanceid);
+            const auto pos = inst->get_offset();
             res_body.push_back({{"model_key", params.items[i].model_key},
+                                {"instance", params.items[i].instanceid},
+                                {"position", {pos.x(), pos.y(), pos.z()}},
                                 {"bbox_min", {bb.min.x(), bb.min.y(), bb.min.z()}},
                                 {"bbox_max", {bb.max.x(), bb.max.y(), bb.max.z()}}});
         }
         return orca_success_response("Successfully set the transforms", res_body);
 
     } catch (std::exception& e) {
-        return orca_error_response(orca_response_code::failed, e.what());
+        return orca_error_response(orca_response_code::invalid_parameters, e.what());
     }
 }
 
