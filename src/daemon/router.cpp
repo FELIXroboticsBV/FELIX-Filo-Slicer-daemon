@@ -231,17 +231,14 @@ void router::cache_request(json& request)
 
 void router::dump_request_cache(const boost::filesystem::path& dst)
 {
-    nlohmann::json j = nlohmann::json::array();
-    for (auto& request : m_requestQueue) {
-        j.push_back(request);
+    const auto file = dst / "cache_dump.json";
+    BOOST_LOG_TRIVIAL(info) << "Dumping request cache \n \t location: " << file;
+    std::ofstream out(file.string());
+    if (!out) {
+        BOOST_LOG_TRIVIAL(error) << "Failed to open " << file.string() << " for writing";
+        return;
     }
-
-    std::ofstream out;
-    out.open(dst / "cache_dump.json");
-
-    out << j.dump(4);
-
-    out.close();
+    out << nlohmann::json(m_requestQueue).dump(4);
 }
 
 } // namespace felix_daemon
