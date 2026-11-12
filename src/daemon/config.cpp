@@ -24,6 +24,7 @@ void daemon_config::load(const std::string& filename)
     boost::property_tree::read_ini(filename, pt);
 
     // parse the .ini
+
     socketName              = pt.get<std::string>("daemon.socket_name", socketName);
     max_pending_connections = pt.get<int>("daemon.max_pending_connections", max_pending_connections);
     cache_requests          = pt.get<bool>("daemon.cache_requests");

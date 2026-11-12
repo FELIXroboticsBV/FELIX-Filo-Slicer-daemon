@@ -66,7 +66,7 @@ next_action router::operator()(int client_fd)
     char buf[4096];
 
     while (true) {
-        // read the data tha thave arived at the server
+        // read the data tha have arrived at the server
         ssize_t n = read(client_fd, buf, sizeof(buf));
         if (!was_read_successful(n)) {
             break;
