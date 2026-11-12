@@ -14,6 +14,9 @@ struct daemon_config
 {
     std::string socketName      = "felix-daemon";
     int max_pending_connections = 5;
+    bool cache_requests         = true;
+    int max_request_cache_count = 200;
+
     void load(const std::string& filename);
     void save(const std::string& filename);
 

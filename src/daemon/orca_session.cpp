@@ -9,6 +9,7 @@
 #include "orca_response.hpp"
 #include <boost/filesystem/operations.hpp>
 #include <boost/filesystem/path.hpp>
+#include <boost/log/sources/record_ostream.hpp>
 #include <boost/log/trivial.hpp>
 #include <detail/exceptions.hpp>
 #include <exception>
@@ -100,6 +101,7 @@ Load model command
 ********************************************************************************/
 orca_response orca_session::cmd_load_model(const nlohmann::json& parameters)
 {
+    BOOST_LOG_TRIVIAL(info) << "Loading model ... ";
     // parse the parameters
     try {
         Cmd_Load_Model_Parameters ctx;
@@ -140,6 +142,8 @@ orca_response orca_session::cmd_load_model(const nlohmann::json& parameters)
 orca_response orca_session::cmd_instantiate_object(const nlohmann::json& parameters)
 {
     try {
+        BOOST_LOG_TRIVIAL(info) << "Instantiatting new object ... ";
+
         Cmd_Instantiate_Model_Parameters params;
         params.parse(parameters);
 
@@ -181,6 +185,8 @@ Set printer command
 orca_response orca_session::cmd_set_printer(const nlohmann::json& parameters)
 {
     try {
+        BOOST_LOG_TRIVIAL(info) << "Setting printer ... ";
+
         // parse the arguments
         Cmd_Set_Printer_Parameters p;
         p.parse(parameters);
@@ -244,6 +250,8 @@ Slice command
 ********************************************************************************/
 orca_response orca_session::cmd_slice(const nlohmann::json& parameters)
 {
+    BOOST_LOG_TRIVIAL(info) << "Slicing";
+
     if (is_slicing()) {
         return orca_error_response(
             orca_response_code::busy,
@@ -352,6 +360,7 @@ Check progress
 ********************************************************************************/
 orca_response orca_session::cmd_check_slice_progress(const nlohmann::json& parameters)
 {
+    BOOST_LOG_TRIVIAL(info) << "Checkin slice progress...";
     orca_slicing_progress progress;
     {
         std::lock_guard<std::mutex> lock(m_slicingMutex);
@@ -374,6 +383,7 @@ Set filament
 ********************************************************************************/
 orca_response orca_session::cmd_set_filament(const nlohmann::json& parameters)
 {
+    BOOST_LOG_TRIVIAL(info) << "Setting filament...";
     try {
         Cmd_Set_Filament_Parameters p;
         p.parse(parameters);

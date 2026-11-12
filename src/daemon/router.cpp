@@ -7,6 +7,7 @@
 
 #include "router.hpp"
 #include "boost/log/trivial.hpp"
+#include "config.hpp"
 #include "orca_session.hpp"
 #include <json_fwd.hpp>
 #include <cerrno>
@@ -124,6 +125,11 @@ void router::process_request(int client_fd, const std::string& msg)
             safe_send(client_fd, error(id, response_code::not_found, "Unknown command: " + req.cmd).stringify());
             return;
         }
+
+        if (cfg.cache_requests) {
+            cache_request(src);
+        }
+
         auto response = action->second(req.params);
 
         if (response.failed) {
@@ -199,6 +205,17 @@ server_response router::success(int id, const std::string& msg, json& body)
 {
     BOOST_LOG_TRIVIAL(info) << "Processed request \n \t end message: " << msg;
     return {id, next_action::keep_running, response_code::ok, body};
+}
+
+void router::cache_request(json& request)
+{
+    if (m_requestQueue.size() < cfg.max_request_cache_count) {
+        // push back the request
+        m_requestQueue.push_back(request);
+    } else {
+        // remove the front of the queue and push back the other one
+        m_requestQueue.pop_front();
+    }
 }
 
 } // namespace felix_daemon

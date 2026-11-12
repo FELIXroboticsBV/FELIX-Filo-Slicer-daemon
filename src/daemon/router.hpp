@@ -16,10 +16,12 @@
 
 #pragma once
 
+#include <deque>
 #include <json_fwd.hpp>
 #include <optional>
 #include <string>
 #include <sys/types.h>
+#include <queue>
 #include "response.hpp"
 #include "orca_response.hpp"
 
@@ -92,6 +94,14 @@ private:
     server_response success(int id, const std::string& msg, json& body);
 
 private:
+    /**
+     * Caches the request for the debugging
+     * @param  {json} request : request that was sent to the server
+     */
+    void cache_request(json& request);
+
+private:
+    std::deque<nlohmann::json> m_requestQueue;
     std::unordered_map<std::string, orca_cmd> m_commands;
 };
 } // namespace felix_daemon
