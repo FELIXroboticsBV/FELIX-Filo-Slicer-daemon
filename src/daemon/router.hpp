@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <boost/filesystem/path.hpp>
 #include <deque>
 #include <json_fwd.hpp>
 #include <optional>
@@ -99,6 +100,12 @@ private:
      * @param  {json} request : request that was sent to the server
      */
     void cache_request(json& request);
+
+    /**
+     * Wries json out the m_requestCache to the dst location
+     * @param  {boost::filesystem::path} dst :
+     */
+    void dump_request_cache(const boost::filesystem::path& params);
 
 private:
     std::deque<nlohmann::json> m_requestQueue;

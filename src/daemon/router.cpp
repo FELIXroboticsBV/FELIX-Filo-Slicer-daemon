@@ -8,10 +8,16 @@
 #include "router.hpp"
 #include "boost/log/trivial.hpp"
 #include "config.hpp"
+#include "orca_response.hpp"
 #include "orca_session.hpp"
+#include "paths.hpp"
+#include <fstream>
+#include <ios>
+#include <istream>
 #include <json_fwd.hpp>
 #include <cerrno>
 #include <cstring>
+#include <ostream>
 #include <stdexcept>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -56,6 +62,12 @@ router::router(orca_session& orca_session)
     m_commands.emplace("get_state", [s = &orca_session](const json& p) { return s->cmd_get_preset_info(p); });
     m_commands.emplace("remove_model", [s = &orca_session](const json& p) { return s->cmd_remove_model(p); });
     m_commands.emplace("remove_instance", [s = &orca_session](const json& p) { return s->cmd_remove_instance(p); });
+
+    // server side command for dumping the request cache
+    m_commands.emplace("dump_request_cache", [this](const json& p) {
+        dump_request_cache(felix_daemon::default_data_directory());
+        return orca_response();
+    });
 }
 
 next_action router::operator()(int client_fd)
@@ -100,7 +112,6 @@ bool router::handle_message(int client_fd, const std::string& msg)
     if (msg == "shutdown") {
         return true;
     }
-
     process_request(client_fd, msg);
 
     return false;
@@ -216,6 +227,21 @@ void router::cache_request(json& request)
         // remove the front of the queue and push back the other one
         m_requestQueue.pop_front();
     }
+}
+
+void router::dump_request_cache(const boost::filesystem::path& dst)
+{
+    nlohmann::json j = nlohmann::json::array();
+    for (auto& request : m_requestQueue) {
+        j.push_back(request);
+    }
+
+    std::ofstream out;
+    out.open(dst / "cache_dump.json");
+
+    out << j.dump(4);
+
+    out.close();
 }
 
 } // namespace felix_daemon
