@@ -1,0 +1,199 @@
+name: Build orca-daemon (Linux)
+
+on:
+  push:
+    branches:
+      - main
+    paths: &build_paths
+      - "deps/**"
+      - "deps_src/**"
+      - "cmake/**"
+      - "src/libslic3r/**"
+      - "src/daemon/**"
+      - "src/CMakeLists.txt"
+      - "CMakeLists.txt"
+      - "version.inc"
+      - "build_linux.sh"
+      - "scripts/linux.d/**"
+      - ".github/actions/apt-install-deps/**"
+      - ".github/workflows/build-daemon-linux.yml"
+  pull_request:
+    branches:
+      - main
+    paths: *build_paths
+  workflow_dispatch:
+
+concurrency:
+  group: build-daemon-linux-${{ github.event.pull_request.number || github.ref }}
+  # Pushes run to the end, so they always save the caches pull requests restore.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Must match between the deps build and the daemon build.
+  HEADLESS_CMAKE_ARGS: -DSLIC3R_GUI=OFF -DSLIC3R_CAD=OFF
+  # Bump to invalidate the deps cache without touching deps/.
+  DEPS_CACHE_VERSION: v1
+
+jobs:
+  build:
+    name: Build orca-daemon Linux ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            os: ubuntu-24.04
+          # Uncomment for an arm64 build (e.g. Raspberry Pi class hosts).
+          # - arch: aarch64
+          #   os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    # A cold deps build takes a couple of hours on a hosted runner.
+    timeout-minutes: 300
+    env:
+      DEPS_PATH: ${{ github.workspace }}/deps/build/OrcaSlicer_dep
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          lfs: "false"
+
+      # Keyed before anything writes into deps/, since hashFiles covers it.
+      - name: Compute deps cache key
+        id: deps_key
+        shell: bash
+        run: echo "key=daemon-deps-linux-clang-${{ matrix.arch }}-${{ env.DEPS_CACHE_VERSION }}-${{ hashFiles('deps/**') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore deps
+        id: deps_cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.DEPS_PATH }}
+          key: ${{ steps.deps_key.outputs.key }}
+
+      - uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~4.3.0"
+          useLocalCache: true
+          useCloudCache: true
+
+      - name: Apt-Install Dependencies
+        uses: ./.github/actions/apt-install-deps
+
+      - name: Build deps
+        if: steps.deps_cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: ./build_linux.sh -drlL -- ${{ env.HEADLESS_CMAKE_ARGS }}
+
+      - name: Save deps
+        if: steps.deps_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.DEPS_PATH }}
+          key: ${{ steps.deps_key.outputs.key }}
+
+      - name: Name the compiler cache leg
+        shell: bash
+        run: |
+          leg="daemon-Linux-${{ matrix.arch }}"
+          echo "CCACHE_LEG=$leg" >> "$GITHUB_ENV"
+          echo "CCACHE_ENTRY=ccache-$leg-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_ENV"
+
+      - name: Compiler cache
+        id: ccache
+        continue-on-error: true
+        uses: hendrikmuhs/ccache-action@v1.2.24
+        with:
+          key: ${{ env.CCACHE_LEG }}
+          max-size: 1G
+          restore: false
+          save: false
+          job-summary: ""
+
+      - name: Restore compiler cache
+        id: ccache_restore
+        if: ${{ steps.ccache.outcome == 'success' }}
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ${{ env.CCACHE_ENTRY }}
+          restore-keys: ccache-${{ env.CCACHE_LEG }}-
+
+      - name: Enable compiler cache
+        if: ${{ steps.ccache.outcome == 'success' }}
+        shell: bash
+        run: |
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> "$GITHUB_ENV"
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> "$GITHUB_ENV"
+          echo "CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime,include_file_ctime" >> "$GITHUB_ENV"
+          echo "CCACHE_DEPEND=1" >> "$GITHUB_ENV"
+          ccache -z
+
+      - name: Build orca-daemon
+        shell: bash
+        run: |
+          # cmake 4.x compatibility workaround, as in build_linux.sh.
+          export CMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=/usr/bin/clang \
+            -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+            -DCMAKE_LINKER="$(command -v ld.lld)" \
+            -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld \
+            -DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=lld \
+            -DCMAKE_MODULE_LINKER_FLAGS=-fuse-ld=lld \
+            -DDEP_BUILD_DIR="${{ github.workspace }}/deps/build" \
+            -DORCA_DAEMON=ON \
+            ${{ env.HEADLESS_CMAKE_ARGS }}
+          cmake --build build --config Release --target orca-daemon
+
+      - name: Package orca-daemon
+        shell: bash
+        run: |
+          pkg=orca-daemon_Linux_${{ matrix.arch }}_${GITHUB_SHA::7}
+          echo "PKG_NAME=$pkg" >> "$GITHUB_ENV"
+          mkdir -p "dist/$pkg/bin"
+          cp build/src/daemon/orca-daemon "dist/$pkg/bin/"
+          cp -r resources "dist/$pkg/resources"
+          cp LICENSE.txt "dist/$pkg/"
+          ldd "dist/$pkg/bin/orca-daemon"
+          tar -czf "$pkg.tar.gz" -C dist "$pkg"
+
+      - name: Upload orca-daemon
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.PKG_NAME }}
+          path: ${{ env.PKG_NAME }}.tar.gz
+          if-no-files-found: error
+
+      - name: Compiler cache statistics
+        if: ${{ always() && steps.ccache.outcome == 'success' }}
+        shell: bash
+        run: |
+          ccache --evict-older-than 7d
+          ccache -s -v || ccache -s
+
+      - name: Save compiler cache
+        id: ccache_save
+        if: ${{ always() && steps.ccache_restore.outcome == 'success' && github.event_name != 'pull_request' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ${{ env.CCACHE_ENTRY }}
+
+      - name: Drop older compiler cache entries
+        if: ${{ always() && steps.ccache_save.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh cache list --ref "$GITHUB_REF" --key "$CCACHE_ENTRY" --json key \
+              | jq -e --arg entry "$CCACHE_ENTRY" 'any(.[]; .key == $entry)' > /dev/null; then
+            echo "$CCACHE_ENTRY was not saved; keeping the older entries."
+            exit 0
+          fi
+          gh cache list --ref "$GITHUB_REF" --key "ccache-$CCACHE_LEG-" --limit 100 --json id,key \
+            | jq -r --arg prefix "ccache-$CCACHE_LEG-" --argjson run "$GITHUB_RUN_ID" \
+                '.[] | select((.key | ltrimstr($prefix) | split("-")[0] | tonumber?) < $run) | .id' \
+            | while read -r id; do gh cache delete "$id"; done
