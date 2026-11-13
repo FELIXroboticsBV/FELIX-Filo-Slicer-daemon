@@ -27,7 +27,17 @@ CLI::App* set_up_cli(char** argv)
 
 int override_config(CLI::App* app, int argc, char** argv)
 {
-    CLI11_PARSE(*app, argc, argv);
+    try {
+        app->parse(argc, argv);
+    } catch (const CLI::CallForHelp& e) {
+        app->exit(e);
+        return 1;
+    } catch (const CLI::CallForAllHelp& e) {
+        app->exit(e);
+        return 1;
+    } catch (const CLI::ParseError& e) {
+        return app->exit(e);
+    }
     return 0;
 }
 } // namespace felix_daemon::utils

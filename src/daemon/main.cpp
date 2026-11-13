@@ -17,6 +17,8 @@
 #include "utils/create_profiles_directories.hpp"
 #include "utils/parse_cli.hpp"
 
+constexpr int help_requested = 1;
+
 int main(int argc, char** argv)
 {
     // set up cli
@@ -36,8 +38,9 @@ int main(int argc, char** argv)
     felix_daemon::cfg.load(felix_daemon::config_path().string());
 
     // parse the command line arguments and override config
-    int result = felix_daemon::utils::override_config(app, argc, argv);
-    BOOST_LOG_TRIVIAL(info) << result;
+    if (felix_daemon::utils::override_config(app, argc, argv) == help_requested) {
+        return 0;
+    }
     // create orca session
     felix_daemon::orca_session orca_session;
 
