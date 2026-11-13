@@ -15,7 +15,7 @@
 #include "paths.hpp"
 #include "utils/create_profiles_directories.hpp"
 
-int main()
+int main(int argc, char** argv)
 {
     // configure the logger
     auto logDir = felix_daemon::default_data_directory();
@@ -29,6 +29,8 @@ int main()
 
     // load the config
     felix_daemon::cfg.load(felix_daemon::config_path().string());
+
+    // parse the command line arguments and override config
 
     // create orca session
     felix_daemon::orca_session orca_session;
