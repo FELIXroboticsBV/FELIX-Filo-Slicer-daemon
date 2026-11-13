@@ -1,5 +1,7 @@
 # FELIX Filo slicing daemon
 
+[![Build orca-daemon (Linux)](https://github.com/FELIXroboticsBV/FELIX-Filo-Slicer-daemon/actions/workflows/build-daemon-linux.yml/badge.svg)](https://github.com/FELIXroboticsBV/FELIX-Filo-Slicer-daemon/actions/workflows/build-daemon-linux.yml)
+
 > In computing, a daemon (/ˈdiːmən/ DEE-mən or /ˈdeɪmən/ DAY-mən) is a program that runs as a background process, rather than being under the direct control of an interactive user. _(Wikipedia)_
 
 A daemon application that allows other applications to utilise Orca's slicing capabilities without linking directly against Orca Slicer.

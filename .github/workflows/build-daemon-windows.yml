@@ -1,0 +1,120 @@
+name: Build orca-daemon (Windows)
+
+on:
+  push:
+    branches:
+      - main
+    paths: &build_paths
+      - "deps/**"
+      - "deps_src/**"
+      - "cmake/**"
+      - "src/libslic3r/**"
+      - "src/daemon/**"
+      - "src/CMakeLists.txt"
+      - "CMakeLists.txt"
+      - "version.inc"
+      - "build_win.bat"
+      - ".github/workflows/build-daemon-windows.yml"
+  pull_request:
+    branches:
+      - main
+    paths: *build_paths
+  workflow_dispatch:
+
+concurrency:
+  group: build-daemon-windows-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Must match between the deps build and the daemon build.
+  HEADLESS_CMAKE_ARGS: -DSLIC3R_GUI=OFF -DSLIC3R_CAD=OFF
+  # Bump to invalidate the deps cache without touching deps/.
+  DEPS_CACHE_VERSION: v1
+
+jobs:
+  build:
+    name: Build orca-daemon Windows x64
+    runs-on: windows-latest
+    # A cold deps build takes a couple of hours on a hosted runner.
+    timeout-minutes: 300
+    env:
+      DEPS_PATH: ${{ github.workspace }}/deps/build/OrcaSlicer_dep
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          lfs: "false"
+
+      # Keyed before anything writes into deps/, since hashFiles covers it.
+      - name: Compute deps cache key
+        id: deps_key
+        shell: pwsh
+        run: echo "key=daemon-deps-windows-x64-clang-${{ env.DEPS_CACHE_VERSION }}-${{ hashFiles('deps/**') }}" >> $env:GITHUB_OUTPUT
+
+      - name: Restore deps
+        id: deps_cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.DEPS_PATH }}
+          key: ${{ steps.deps_key.outputs.key }}
+
+      - uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~4.3.0"
+          useLocalCache: true
+          useCloudCache: true
+
+      - name: Setup MSVC
+        uses: microsoft/setup-msbuild@v3
+
+      # Same toolchain as build_deps.yml: clang-cl (-l) and Ninja (-x).
+      - name: Build deps
+        if: steps.deps_cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        env:
+          ORCA_DEPS_CMAKE_ARGS: ${{ env.HEADLESS_CMAKE_ARGS }}
+        run: |
+          choco install strawberryperl
+          $deps = "${{ github.workspace }}/deps/build".Replace('\', '/')
+          .\build_win.bat -d -l -x --arch x64 --deps-dir $deps
+
+      # Saved straight away, so a failing daemon build does not throw away a
+      # multi-hour deps build.
+      - name: Save deps
+        if: steps.deps_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.DEPS_PATH }}
+          key: ${{ steps.deps_key.outputs.key }}
+
+      - name: Build orca-daemon
+        shell: pwsh
+        env:
+          ORCA_SLICER_CMAKE_ARGS: -DORCA_DAEMON=ON ${{ env.HEADLESS_CMAKE_ARGS }}
+        run: |
+          $deps = "${{ github.workspace }}/deps/build".Replace('\', '/')
+          .\build_win.bat -s -l -x --arch x64 --deps-dir $deps --build-dir build --slicer-target orca-daemon --no-gettext
+
+      # The daemon looks for Orca's resources at <exe dir>\resources
+      # (src/daemon/paths.hpp). The configure step stages the runtime DLLs
+      # (GMP, MPFR, OCCT, ...) in build\src\Release.
+      - name: Package orca-daemon
+        shell: pwsh
+        run: |
+          $pkg = "orca-daemon_Windows_x64_$("${{ github.sha }}".Substring(0, 7))"
+          "PKG_NAME=$pkg" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+          New-Item -ItemType Directory -Force "dist/$pkg" | Out-Null
+          $exe = Get-ChildItem build/src/daemon -Recurse -Filter orca-daemon.exe | Select-Object -First 1
+          if (-not $exe) { throw "orca-daemon.exe not found under build/src/daemon" }
+          Copy-Item $exe.FullName "dist/$pkg/"
+          Copy-Item build/src/Release/*.dll "dist/$pkg/"
+          Copy-Item resources "dist/$pkg/resources" -Recurse
+          Copy-Item LICENSE.txt "dist/$pkg/"
+
+      - name: Upload orca-daemon
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.PKG_NAME }}
+          path: dist/${{ env.PKG_NAME }}
+          if-no-files-found: error
