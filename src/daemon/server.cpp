@@ -15,6 +15,7 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <afunix.h> // AF_UNIX / sockaddr_un on Windows
+// note that this is supported from windows 10 (which should be deprecated by this point)
 #else
 #include <sys/socket.h>
 #include <sys/un.h> // sockaddr_un

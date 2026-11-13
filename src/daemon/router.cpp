@@ -64,10 +64,14 @@ router::router(orca_session& orca_session)
     m_commands.emplace("remove_instance", [s = &orca_session](const json& p) { return s->cmd_remove_instance(p); });
 
     // server side command for dumping the request cache
-    m_commands.emplace("dump_request_cache", [this](const json& p) {
-        dump_request_cache(felix_daemon::default_data_directory());
-        return orca_response();
-    });
+    if (flags & daemon_start_flag_bits::allow_request_cache_dump) {
+        BOOST_LOG_TRIVIAL(info) << "Dump request cache command is enabled ";
+
+        m_commands.emplace("dump_request_cache", [this](const json& p) {
+            dump_request_cache(felix_daemon::default_data_directory());
+            return orca_response();
+        });
+    }
 }
 
 next_action router::operator()(int client_fd)

@@ -24,8 +24,15 @@ private:
     bool loaded = false;
 };
 
+enum daemon_start_flag_bits {
+    allow_request_cache_dump = 1 << 0,
+};
+
+using daemon_start_flags = int;
+
 /**
     Global variable that contains parsed information of the config.ini
 */
 inline daemon_config cfg;
+inline daemon_start_flags flags = 0;
 } // namespace felix_daemon
