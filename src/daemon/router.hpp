@@ -17,14 +17,15 @@
 #pragma once
 
 #include <boost/filesystem/path.hpp>
+#include <cstddef>
 #include <deque>
 #include <json_fwd.hpp>
 #include <optional>
 #include <string>
-#include <sys/types.h>
 #include <queue>
 #include "response.hpp"
 #include "orca_response.hpp"
+#include "socket.hpp"
 
 namespace felix_daemon {
 class orca_session;
@@ -35,44 +36,44 @@ public:
 
     /**
      * Callback that is called by the server when client is connected.
-     * @param  {int} client_fd : accepted clinet file descriptor
-     * @return {next_action}   : what the server should next ? (keep running , shutdown)
+     * @param  {local_socket} socket : accepted client socket
+     * @return {next_action}         : what the server should next ? (keep running , shutdown)
      */
-    next_action operator()(int client_fd);
+    next_action operator()(local_socket& socket);
 
 private:
     /**
-     * Checks if read() system call actually read the entire message
-     * @param  {ssize_t} n : value returned by the read() call
-     * @return {bool}      : true if data was read, false on EOF or error
+     * Checks if receive() actually read the data
+     * @param  {std::ptrdiff_t} n : value returned by the receive() call
+     * @return {bool}             : true if data was read, false on EOF or error
      */
-    bool was_read_successful(ssize_t n);
+    bool was_read_successful(std::ptrdiff_t n);
 
     /**
      * Processes the request issued from the client and sends
-     * @param  {int} client_fd   : file descriptor of the client
-     * @param  {std::string} msg : message that the client sent (json)
-     * @return {bool}            : true if the server should be tuned off
+     * @param  {local_socket} socket : client socket
+     * @param  {std::string} msg     : message that the client sent (json)
+     * @return {bool}                : true if the server should be tuned off
      */
-    bool handle_message(int client_fd, const std::string& msg);
+    bool handle_message(const local_socket& socket, const std::string& msg);
 
     /**
      * Safely sends the message, safely means that it ensure that the entire message is written
-     * @param  {int} clinet_fd   : client's file descriptor
-     * @param  {std::string} msg : message (inlined json)
+     * @param  {local_socket} socket : client socket
+     * @param  {std::string} msg     : message (inlined json)
      */
-    void safe_send(int clinet_fd, const std::string& msg);
+    void safe_send(const local_socket& socket, const std::string& msg);
 
     /**
      * Forwards the request to the appropriate parts of the orca_session and invokes its calls
-     * @param  {int} clinet_fd   : client file descriptor
-     * @param  {std::string} msg : message (inlined json)
+     * @param  {local_socket} socket : client socket
+     * @param  {std::string} msg     : message (inlined json)
      */
-    void process_request(int clinet_fd, const std::string& msg);
+    void process_request(const local_socket& socket, const std::string& msg);
 
     /**
      * Creates error server response
-     * USAGE: safe_send(client_fd, error(id, response_code::user_error, e.what()).stringify())
+     * USAGE: safe_send(socket, error(id, response_code::user_error, e.what()).stringify())
      * @param  {int} id             : id of the message that generated this message
      * @param  {response_code} code : code sent to the client
      * @param  {std::string} what   : error message that you want to send

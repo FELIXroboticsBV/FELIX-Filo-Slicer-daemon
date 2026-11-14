@@ -8,19 +8,13 @@
 #include "router.hpp"
 #include "boost/log/trivial.hpp"
 #include "config.hpp"
-#include "orca_response.hpp"
 #include "orca_session.hpp"
 #include "paths.hpp"
 #include <fstream>
 #include <ios>
 #include <istream>
-#include <json_fwd.hpp>
-#include <cerrno>
-#include <cstring>
 #include <ostream>
 #include <stdexcept>
-#include <sys/socket.h>
-#include <unistd.h>
 
 namespace felix_daemon {
 
@@ -74,7 +68,7 @@ router::router(orca_session& orca_session)
     }
 }
 
-next_action router::operator()(int client_fd)
+next_action router::operator()(local_socket& socket)
 {
     server_response response;
     // data that will arrive at the server
@@ -83,7 +77,7 @@ next_action router::operator()(int client_fd)
 
     while (true) {
         // read the data tha have arrived at the server
-        ssize_t n = read(client_fd, buf, sizeof(buf));
+        std::ptrdiff_t n = socket.receive(buf, sizeof(buf));
         if (!was_read_successful(n)) {
             break;
         }
@@ -97,37 +91,37 @@ next_action router::operator()(int client_fd)
             if (!line.empty() && line.back() == '\r')
                 line.pop_back();
 
-            if (handle_message(client_fd, line)) {
+            if (handle_message(socket, line)) {
                 return next_action::shutdown;
             }
         }
     }
 
-    if (!pending.empty() && handle_message(client_fd, pending))
+    if (!pending.empty() && handle_message(socket, pending))
         return next_action::shutdown;
 
     return next_action::keep_running;
 }
 
-bool router::handle_message(int client_fd, const std::string& msg)
+bool router::handle_message(const local_socket& socket, const std::string& msg)
 {
     BOOST_LOG_TRIVIAL(info) << "Received: " << msg;
 
     if (msg == "shutdown") {
         return true;
     }
-    process_request(client_fd, msg);
+    process_request(socket, msg);
 
     return false;
 }
 
-void router::process_request(int client_fd, const std::string& msg)
+void router::process_request(const local_socket& socket, const std::string& msg)
 {
     json src;
     try {
         src = json::parse(msg);
     } catch (const json::parse_error& e) {
-        safe_send(client_fd, error(-1, response_code::user_error, e.what()).stringify());
+        safe_send(socket, error(-1, response_code::user_error, e.what()).stringify());
         return;
     }
 
@@ -137,7 +131,7 @@ void router::process_request(int client_fd, const std::string& msg)
 
         auto action = m_commands.find(req.cmd);
         if (action == m_commands.end()) {
-            safe_send(client_fd, error(id, response_code::not_found, "Unknown command: " + req.cmd).stringify());
+            safe_send(socket, error(id, response_code::not_found, "Unknown command: " + req.cmd).stringify());
             return;
         }
 
@@ -148,16 +142,16 @@ void router::process_request(int client_fd, const std::string& msg)
         auto response = action->second(req.params);
 
         if (response.failed) {
-            safe_send(client_fd, error(id, to_response_code(response.code), response.message).stringify());
+            safe_send(socket, error(id, to_response_code(response.code), response.message).stringify());
         } else {
             auto body = response.json.value_or(nlohmann::json());
-            safe_send(client_fd, success(id, response.message, body).stringify());
+            safe_send(socket, success(id, response.message, body).stringify());
         }
 
     } catch (const std::invalid_argument& e) {
-        safe_send(client_fd, error(id, response_code::user_error, e.what()).stringify());
+        safe_send(socket, error(id, response_code::user_error, e.what()).stringify());
     } catch (const std::exception& e) {
-        safe_send(client_fd, error(id, response_code::server_error, e.what()).stringify());
+        safe_send(socket, error(id, response_code::server_error, e.what()).stringify());
     }
 }
 
@@ -173,26 +167,13 @@ response_code router::to_response_code(orca_response_code code)
     return response_code::server_error;
 }
 //
-void router::safe_send(int client_fd, const std::string& msg)
+void router::safe_send(const local_socket& socket, const std::string& msg)
 {
-    const char* p = msg.data();
-    size_t left   = msg.size();
-    while (left > 0) {
-        ssize_t n = send(client_fd, p, left, MSG_NOSIGNAL);
-        if (n < 0) {
-            if (errno == EINTR) {
-                continue;
-            } else {
-                BOOST_LOG_TRIVIAL(error) << "Failed to response to the user";
-                return;
-            }
-        }
-        p += n;
-        left -= static_cast<size_t>(n);
-    }
+    if (!socket.send_all(msg))
+        BOOST_LOG_TRIVIAL(error) << "Failed to response to the user: " << local_socket::last_error();
 }
 
-bool router::was_read_successful(ssize_t n)
+bool router::was_read_successful(std::ptrdiff_t n)
 {
     if (n == 0) {
         BOOST_LOG_TRIVIAL(warning) << "Client have closed the connection ";
@@ -200,8 +181,8 @@ bool router::was_read_successful(ssize_t n)
     }
     if (n < 0) {
         // EINTR here means SIGINT/SIGTERM arrived: return and let the server decide.
-        if (errno != EINTR)
-            BOOST_LOG_TRIVIAL(error) << "read() failed: " << std::strerror(errno);
+        if (!local_socket::interrupted())
+            BOOST_LOG_TRIVIAL(error) << "receive() failed: " << local_socket::last_error();
         return false;
     }
     return true;

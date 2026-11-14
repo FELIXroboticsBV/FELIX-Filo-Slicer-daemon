@@ -160,11 +160,34 @@ jobs:
           tar -czf "$pkg.tar.gz" -C dist "$pkg"
 
       - name: Upload orca-daemon
+        id: upload
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.PKG_NAME }}
           path: ${{ env.PKG_NAME }}.tar.gz
+          # Upload the tarball as-is instead of wrapping it in a zip; the
+          # tarball keeps the executable bit, a zip artifact would not.
+          archive: false
           if-no-files-found: error
+
+      - name: Summarize orca-daemon
+        shell: bash
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          size=$(du -h "$PKG_NAME.tar.gz" | cut -f1)
+          sha=$(sha256sum "$PKG_NAME.tar.gz" | cut -d' ' -f1)
+          {
+            echo "## orca-daemon Linux ${{ matrix.arch }}"
+            echo
+            echo "| Package | Size | SHA-256 |"
+            echo "| --- | --- | --- |"
+            echo "| [\`$PKG_NAME.tar.gz\`]($ARTIFACT_URL) | $size | \`$sha\` |"
+            echo
+            echo '```bash'
+            echo "tar -xzf $PKG_NAME.tar.gz"
+            echo "./$PKG_NAME/bin/orca-daemon --help"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Compiler cache statistics
         if: ${{ always() && steps.ccache.outcome == 'success' }}

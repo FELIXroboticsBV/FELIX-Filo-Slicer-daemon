@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include "socket.hpp"
 #include <functional>
 #include <json.hpp>
 
@@ -44,5 +45,5 @@ struct server_response
 /**
     Definition of the callback function that creates and sends response
 */
-using response_trigger = std::function<next_action(int client_fd)>;
+using response_trigger = std::function<next_action(local_socket& socket)>;
 } // namespace felix_daemon

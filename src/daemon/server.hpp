@@ -17,9 +17,8 @@
 
 #include "config.hpp"
 #include "response.hpp"
+#include "socket.hpp"
 #include <boost/filesystem/path.hpp>
-#include <sys/socket.h>
-#include <sys/un.h>
 
 namespace felix_daemon {
 
@@ -58,11 +57,7 @@ private:
     bool bindSocket();
 
 private:
-    // address of the local socket
-    struct sockaddr_un _addr;
-
-    // socket file descriptor
-    unsigned int _server_fd;
+    local_socket m_socket;
 
     // path to the socket file
     boost::filesystem::path _socketPath;
