@@ -34,7 +34,7 @@ public:
      *
      * @param  {response_trigger} handler : callback function for this server instance to use
      */
-    server(response_trigger handler);
+    server(request_trigger handler);
 
     /**
      * Starts up the server
@@ -62,7 +62,7 @@ private:
     // path to the socket file
     boost::filesystem::path _socketPath;
 
-    response_trigger _handler;
+    request_trigger _request_callback;
 
     bool _ready = false;
     std::atomic<bool> _running{false};

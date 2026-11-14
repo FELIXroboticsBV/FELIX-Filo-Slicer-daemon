@@ -33,23 +33,89 @@ namespace felix_daemon {
 static_assert(sizeof(socket_t) == sizeof(SOCKET), "socket_t must hold a SOCKET");
 #endif
 
+//===========================================================================
+// Errors
+
+bool socket_interrupted()
+{
+#ifdef _WIN32
+    return WSAGetLastError() == WSAEINTR;
+#else
+    return errno == EINTR;
+#endif
+}
+
+std::string socket_last_error()
+{
+#ifdef _WIN32
+    return "WSA error " + std::to_string(WSAGetLastError());
+#else
+    return std::strerror(errno);
+#endif
+}
+
+//===========================================================================
+// Client
+
+// Winsock is initialized by the local_socket, which outlives every client it accepts
+client::client(socket_t fd) : m_fd(fd) {}
+
+client::~client()
+{
+    if (m_fd == invalid_socket)
+        return;
+#ifdef _WIN32
+    closesocket(m_fd);
+#else
+    close(m_fd);
+#endif
+}
+
+bool client::is_valid() const { return m_fd != invalid_socket; }
+
+std::ptrdiff_t client::receive(char* buf, std::size_t len) const
+{
+#ifdef _WIN32
+    return recv(m_fd, buf, static_cast<int>(std::min<std::size_t>(len, INT_MAX)), 0);
+#else
+    return recv(m_fd, buf, len, 0);
+#endif
+}
+
+bool client::send_all(const std::string& msg) const
+{
+    const char* p    = msg.data();
+    std::size_t left = msg.size();
+    while (left > 0) {
+#ifdef _WIN32
+        std::ptrdiff_t n = send(m_fd, p, static_cast<int>(std::min<std::size_t>(left, INT_MAX)), 0);
+#elif defined(MSG_NOSIGNAL)
+        std::ptrdiff_t n = send(m_fd, p, left, MSG_NOSIGNAL);
+#else
+        std::ptrdiff_t n = send(m_fd, p, left, 0); // macOS: SIGPIPE has to be ignored by the caller
+#endif
+        if (n < 0) {
+            if (socket_interrupted())
+                continue;
+            return false;
+        }
+        p += n;
+        left -= static_cast<std::size_t>(n);
+    }
+    return true;
+}
+
+//===========================================================================
+// Local socket
+
 local_socket::local_socket() : m_fd(invalid_socket)
 {
 #ifdef _WIN32
-    // reference counted, every socket initializes and releases it once
     WSADATA data;
     if (WSAStartup(MAKEWORD(2, 2), &data) != 0)
         return;
 #endif
     m_fd = static_cast<socket_t>(socket(AF_UNIX, SOCK_STREAM, 0));
-}
-
-local_socket::local_socket(socket_t fd) : m_fd(fd)
-{
-#ifdef _WIN32
-    WSADATA data;
-    WSAStartup(MAKEWORD(2, 2), &data);
-#endif
 }
 
 local_socket::~local_socket()
@@ -82,58 +148,6 @@ bool local_socket::listen_on(const std::string& path, int backlog)
     return bindSuccessful && listenSuccessful;
 }
 
-local_socket local_socket::accept_client() const { return local_socket(static_cast<socket_t>(accept(m_fd, nullptr, nullptr))); }
-
-std::ptrdiff_t local_socket::receive(char* buf, std::size_t len) const
-{
-#ifdef _WIN32
-    return recv(m_fd, buf, static_cast<int>(std::min<std::size_t>(len, INT_MAX)), 0);
-#else
-    return recv(m_fd, buf, len, 0);
-#endif
-}
-
-bool local_socket::send_all(const std::string& msg) const
-{
-    const char* p    = msg.data();
-    std::size_t left = msg.size();
-    while (left > 0) {
-#ifdef _WIN32
-        std::ptrdiff_t n = send(m_fd, p, static_cast<int>(std::min<std::size_t>(left, INT_MAX)), 0);
-#elif defined(MSG_NOSIGNAL)
-        std::ptrdiff_t n = send(m_fd, p, left, MSG_NOSIGNAL);
-#else
-        std::ptrdiff_t n = send(m_fd, p, left, 0); // macOS: SIGPIPE has to be ignored by the caller
-#endif
-        if (n < 0) {
-            if (interrupted())
-                continue;
-            return false;
-        }
-        p += n;
-        left -= static_cast<std::size_t>(n);
-    }
-    return true;
-}
-
-bool local_socket::interrupted()
-{
-#ifdef _WIN32
-    return WSAGetLastError() == WSAEINTR;
-#else
-    return errno == EINTR;
-#endif
-}
-
-std::string local_socket::last_error()
-{
-#ifdef _WIN32
-    return "WSA error " + std::to_string(WSAGetLastError());
-#else
-    return std::strerror(errno);
-#endif
-}
-
-int local_socket::get_fd() { return m_fd; }
+client local_socket::accept_client() const { return client(static_cast<socket_t>(accept(m_fd, nullptr, nullptr))); }
 
 } // namespace felix_daemon

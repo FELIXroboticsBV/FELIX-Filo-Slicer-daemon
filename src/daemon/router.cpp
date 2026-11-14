@@ -68,7 +68,7 @@ router::router(orca_session& orca_session)
     }
 }
 
-next_action router::operator()(local_socket& socket)
+next_action router::process_request(client& connection)
 {
     server_response response;
     // data that will arrive at the server
@@ -77,7 +77,7 @@ next_action router::operator()(local_socket& socket)
 
     while (true) {
         // read the data tha have arrived at the server
-        std::ptrdiff_t n = socket.receive(buf, sizeof(buf));
+        std::ptrdiff_t n = connection.receive(buf, sizeof(buf));
         if (!was_read_successful(n)) {
             break;
         }
@@ -91,19 +91,19 @@ next_action router::operator()(local_socket& socket)
             if (!line.empty() && line.back() == '\r')
                 line.pop_back();
 
-            if (handle_message(socket, line)) {
+            if (handle_message(connection, line)) {
                 return next_action::shutdown;
             }
         }
     }
 
-    if (!pending.empty() && handle_message(socket, pending))
+    if (!pending.empty() && handle_message(connection, pending))
         return next_action::shutdown;
 
     return next_action::keep_running;
 }
 
-bool router::handle_message(const local_socket& socket, const std::string& msg)
+bool router::handle_message(const client& socket, const std::string& msg)
 {
     BOOST_LOG_TRIVIAL(info) << "Received: " << msg;
 
@@ -115,7 +115,7 @@ bool router::handle_message(const local_socket& socket, const std::string& msg)
     return false;
 }
 
-void router::process_request(const local_socket& socket, const std::string& msg)
+void router::process_request(const client& socket, const std::string& msg)
 {
     json src;
     try {
@@ -167,10 +167,10 @@ response_code router::to_response_code(orca_response_code code)
     return response_code::server_error;
 }
 //
-void router::safe_send(const local_socket& socket, const std::string& msg)
+void router::safe_send(const client& socket, const std::string& msg)
 {
     if (!socket.send_all(msg))
-        BOOST_LOG_TRIVIAL(error) << "Failed to response to the user: " << local_socket::last_error();
+        BOOST_LOG_TRIVIAL(error) << "Failed to response to the user: " << socket_last_error();
 }
 
 bool router::was_read_successful(std::ptrdiff_t n)
@@ -181,8 +181,8 @@ bool router::was_read_successful(std::ptrdiff_t n)
     }
     if (n < 0) {
         // EINTR here means SIGINT/SIGTERM arrived: return and let the server decide.
-        if (!local_socket::interrupted())
-            BOOST_LOG_TRIVIAL(error) << "receive() failed: " << local_socket::last_error();
+        if (!socket_interrupted())
+            BOOST_LOG_TRIVIAL(error) << "receive() failed: " << socket_last_error();
         return false;
     }
     return true;
