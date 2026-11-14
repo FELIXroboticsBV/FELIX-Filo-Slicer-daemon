@@ -50,7 +50,7 @@ void installSignalHandlers()
 
 //============================================================================
 // Server implementation
-server::server(response_trigger handler) : _socketPath(socket_path()), _handler(handler), m_socket()
+server::server(request_trigger handler) : _socketPath(socket_path()), _request_callback(handler), m_socket()
 {
     BOOST_LOG_TRIVIAL(info) << "Staring up daemon`s server";
 
@@ -76,12 +76,12 @@ void server::start()
     _running = true;
 
     while (_running && !g_stopRequested) {
-        // when socket goes out of scope it is closed
-        local_socket client = m_socket.accept_client();
-        if (!client.is_valid())
+        // when the connection goes out of scope it is closed
+        client connection = m_socket.accept_client();
+        if (!connection.is_valid())
             continue;
 
-        auto result = _handler(client);
+        auto result = _request_callback(connection);
         BOOST_LOG_TRIVIAL(info) << "Client disconnected";
 
         if (result == next_action::shutdown) {

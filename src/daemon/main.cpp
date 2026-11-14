@@ -49,7 +49,7 @@ int main(int argc, char** argv)
     felix_daemon::router handler(orca_session);
 
     // create server
-    felix_daemon::server server([&handler](felix_daemon::local_socket& socket) { return handler(socket); });
+    felix_daemon::server server([&handler](felix_daemon::client& socket) { return handler.process_request(socket); });
     server.start();
 
     return 0;

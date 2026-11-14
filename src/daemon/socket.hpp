@@ -36,6 +36,69 @@ using socket_t                    = int;
 constexpr socket_t invalid_socket = -1;
 #endif
 
+/**
+ * Checks if the last failed socket call was interrupted by a signal (EINTR)
+ * @return {bool}  : true if it was interrupted
+ */
+bool socket_interrupted();
+
+/**
+ * Describes the last socket error
+ * @return {std::string}  : error message, for logging
+ */
+std::string socket_last_error();
+
+/**
+ * Connection to a single client, created by local_socket::accept_client()
+ */
+class client
+{
+public:
+    /**
+     * Takes ownership of the connected handle
+     * @param  {socket_t} fd : handle returned by accept()
+     */
+    explicit client(socket_t fd);
+
+    /**
+     * Closes the connection
+     */
+    ~client();
+
+    // delete copy constructor
+    client(const client&)            = delete;
+    client& operator=(const client&) = delete;
+
+    /**
+     * Checks if the client is connected
+     * @return {bool}  : true if the connection can be used
+     */
+    bool is_valid() const;
+
+    /**
+     * Reads the data that the client sent
+     * @param  {char*} buf       : buffer to read into
+     * @param  {std::size_t} len : size of the buffer
+     * @return {std::ptrdiff_t}  : bytes read, 0 if the client closed the connection, < 0 on error
+     */
+    std::ptrdiff_t receive(char* buf, std::size_t len) const;
+
+    /**
+     * Sends the entire message to the client
+     * @param  {std::string} msg : message to send
+     * @return {bool}            : true if the whole message was sent, false otherwise
+     */
+    bool send_all(const std::string& msg) const;
+
+private:
+    socket_t m_fd;
+};
+
+//===================================================================================================
+
+/**
+ * Listening socket of the server, accepts the clients
+ */
 class local_socket
 {
 public:
@@ -69,49 +132,9 @@ public:
 
     /**
      * Blocks until a client connects
-     * @return {local_socket}  : connected client, not valid on failure or when interrupted
+     * @return {client}  : connected client, not valid on failure or when interrupted
      */
-    local_socket accept_client() const;
-
-    /**
-     * Reads the data that arrived on the socket
-     * @param  {char*} buf       : buffer to read into
-     * @param  {std::size_t} len : size of the buffer
-     * @return {std::ptrdiff_t}  : bytes read, 0 if the client closed the connection, < 0 on error
-     */
-    std::ptrdiff_t receive(char* buf, std::size_t len) const;
-
-    /**
-     * Sends the entire message
-     * @param  {std::string} msg : message to send
-     * @return {bool}            : true if the whole message was sent, false otherwise
-     */
-    bool send_all(const std::string& msg) const;
-
-    /**
-     * Checks if the last failed call was interrupted by a signal (EINTR)
-     * @return {bool}  : true if it was interrupted
-     */
-    static bool interrupted();
-
-    /**
-     * Describes the last socket error
-     * @return {std::string}  : error message, for logging
-     */
-    static std::string last_error();
-
-    /**
-     * Retrieves the client`s file descriptor
-     * @return {int}  : file descriptor
-     */
-    int get_fd();
-
-private:
-    /**
-     * Wraps an already connected handle (used by accept_client)
-     * @param  {socket_t} fd : handle returned by accept()
-     */
-    explicit local_socket(socket_t fd);
+    client accept_client() const;
 
 private:
     socket_t m_fd;

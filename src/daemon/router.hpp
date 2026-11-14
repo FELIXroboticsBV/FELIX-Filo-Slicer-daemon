@@ -36,10 +36,10 @@ public:
 
     /**
      * Callback that is called by the server when client is connected.
-     * @param  {local_socket} socket : accepted client socket
+     * @param  {client} socket       : accepted client socket
      * @return {next_action}         : what the server should next ? (keep running , shutdown)
      */
-    next_action operator()(local_socket& socket);
+    next_action process_request(client& socket);
 
 private:
     /**
@@ -51,25 +51,25 @@ private:
 
     /**
      * Processes the request issued from the client and sends
-     * @param  {local_socket} socket : client socket
+     * @param  {client} socket       : client socket
      * @param  {std::string} msg     : message that the client sent (json)
      * @return {bool}                : true if the server should be tuned off
      */
-    bool handle_message(const local_socket& socket, const std::string& msg);
+    bool handle_message(const client& socket, const std::string& msg);
 
     /**
      * Safely sends the message, safely means that it ensure that the entire message is written
-     * @param  {local_socket} socket : client socket
+     * @param  {client} socket       : client socket
      * @param  {std::string} msg     : message (inlined json)
      */
-    void safe_send(const local_socket& socket, const std::string& msg);
+    void safe_send(const client& socket, const std::string& msg);
 
     /**
      * Forwards the request to the appropriate parts of the orca_session and invokes its calls
-     * @param  {local_socket} socket : client socket
+     * @param  {client} socket       : client socket
      * @param  {std::string} msg     : message (inlined json)
      */
-    void process_request(const local_socket& socket, const std::string& msg);
+    void process_request(const client& socket, const std::string& msg);
 
     /**
      * Creates error server response

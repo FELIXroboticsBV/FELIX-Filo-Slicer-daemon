@@ -45,5 +45,5 @@ struct server_response
 /**
     Definition of the callback function that creates and sends response
 */
-using response_trigger = std::function<next_action(local_socket& socket)>;
+using request_trigger = std::function<next_action(client& socket)>;
 } // namespace felix_daemon
