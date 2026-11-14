@@ -8,6 +8,7 @@
 #include "server.hpp"
 #include "response.hpp"
 #include "paths.hpp"
+#include "socket.hpp"
 
 #include <boost/log/trivial.hpp>
 #include <cstring>
@@ -49,22 +50,12 @@ void installSignalHandlers()
 
 //============================================================================
 // Server implementation
-server::server(response_trigger handler) : _socketPath(socket_path()), _handler(handler)
+server::server(response_trigger handler) : _socketPath(socket_path()), _handler(handler), m_socket()
 {
     BOOST_LOG_TRIVIAL(info) << "Staring up daemon`s server";
 
-    _server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-
-    if (!createSocket()) {
+    if (!m_socket.listen_on(_socketPath.string(), cfg.max_pending_connections)) {
         BOOST_LOG_TRIVIAL(error) << "Failed to set address of the socket because the address is too long !";
-    }
-
-    if (!bindSocket()) {
-        BOOST_LOG_TRIVIAL(error) << "Failed to bind socket !";
-    }
-
-    if (listen(_server_fd, cfg.max_pending_connections) != 0) {
-        BOOST_LOG_TRIVIAL(error) << "Failed to listen on the socket !";
     }
 
     _ready = true;
@@ -85,18 +76,12 @@ void server::start()
     _running = true;
 
     while (_running && !g_stopRequested) {
-        // wait until the client connects
-        int client_fd = accept(_server_fd, nullptr, nullptr);
-        if (client_fd < 0) // EINTR from a stop signal, or a transient accept() error
+        // when socket goes out of scope it is closed
+        local_socket client = m_socket.accept_client();
+        if (!client.is_valid())
             continue;
 
-        BOOST_LOG_TRIVIAL(info) << "Client connected";
-
-        // handler will process the data and return the result to the user
-        // optionally it will also write back to the user
-        auto result = _handler(client_fd);
-
-        close(client_fd);
+        auto result = _handler(client);
         BOOST_LOG_TRIVIAL(info) << "Client disconnected";
 
         if (result == next_action::shutdown) {
@@ -109,35 +94,10 @@ void server::start()
     BOOST_LOG_TRIVIAL(info) << "Server loop stopped";
 }
 
-bool server::createSocket()
-{
-    const std::string p = _socketPath.string();
-    std::memset(&_addr, 0, sizeof(_addr));
-    _addr.sun_family = AF_UNIX;
-
-    if (p.size() >= sizeof(_addr.sun_path))
-        return false;
-
-    std::memcpy(_addr.sun_path, p.c_str(), p.size() + 1);
-    return true;
-}
-
-bool server::bindSocket()
-{
-    // first unlink the socket from the previous use
-    boost::filesystem::remove(_socketPath.c_str());
-    int result = bind(_server_fd, (struct sockaddr*) &_addr, sizeof(_addr));
-
-    return result == 0;
-}
-
 server::~server()
 {
-    if (close(_server_fd) != 0) {
-        BOOST_LOG_TRIVIAL(error) << "Failed to close file descriptor of the server socket";
-    }
-
-    unlink(_socketPath.c_str());
+    boost::system::error_code ec;
+    boost::filesystem::remove(_socketPath, ec);
 
     BOOST_LOG_TRIVIAL(info) << "Shuting down daemon`s server";
 }

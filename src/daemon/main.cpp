@@ -14,6 +14,7 @@
 #include "orca_session.hpp"
 #include "server.hpp"
 #include "paths.hpp"
+#include "socket.hpp"
 #include "utils/create_profiles_directories.hpp"
 #include "utils/parse_cli.hpp"
 
@@ -48,7 +49,7 @@ int main(int argc, char** argv)
     felix_daemon::router handler(orca_session);
 
     // create server
-    felix_daemon::server server([&handler](int client_fd) { return handler(client_fd); });
+    felix_daemon::server server([&handler](felix_daemon::local_socket& socket) { return handler(socket); });
     server.start();
 
     return 0;

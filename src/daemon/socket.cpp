@@ -73,8 +73,13 @@ bool local_socket::listen_on(const std::string& path, int backlog)
     if (path.size() >= sizeof(addr.sun_path))
         return false;
     std::memcpy(addr.sun_path, path.c_str(), path.size() + 1);
+    // bind the socket
+    bool bindSuccessful = bind(m_fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0;
 
-    return bind(m_fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0 && listen(m_fd, backlog) == 0;
+    // listen on the socket
+    bool listenSuccessful = listen(m_fd, backlog) == 0;
+
+    return bindSuccessful && listenSuccessful;
 }
 
 local_socket local_socket::accept_client() const { return local_socket(static_cast<socket_t>(accept(m_fd, nullptr, nullptr))); }
@@ -128,5 +133,7 @@ std::string local_socket::last_error()
     return std::strerror(errno);
 #endif
 }
+
+int local_socket::get_fd() { return m_fd; }
 
 } // namespace felix_daemon

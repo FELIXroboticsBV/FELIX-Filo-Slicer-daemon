@@ -100,6 +100,12 @@ public:
      */
     static std::string last_error();
 
+    /**
+     * Retrieves the client`s file descriptor
+     * @return {int}  : file descriptor
+     */
+    int get_fd();
+
 private:
     /**
      * Wraps an already connected handle (used by accept_client)
