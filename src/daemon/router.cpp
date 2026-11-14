@@ -150,7 +150,7 @@ void router::process_request(int client_fd, const std::string& msg)
         if (response.failed) {
             safe_send(client_fd, error(id, to_response_code(response.code), response.message).stringify());
         } else {
-            auto body = response.json.value_or({});
+            auto body = response.json.value_or(nlohmann::json());
             safe_send(client_fd, success(id, response.message, body).stringify());
         }
 
@@ -172,7 +172,7 @@ response_code router::to_response_code(orca_response_code code)
     }
     return response_code::server_error;
 }
-
+//
 void router::safe_send(int client_fd, const std::string& msg)
 {
     const char* p = msg.data();
