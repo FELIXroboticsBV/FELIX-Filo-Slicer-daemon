@@ -17,8 +17,11 @@ using boost::property_tree::ptree;
 
 void daemon_config::load(const std::string& filename)
 {
-    assert(loaded == false && "you have allready called load !");
-
+    if (loaded) {
+        return;
+    } else {
+        loaded = true;
+    }
     ptree pt;
 
     boost::property_tree::read_ini(filename, pt);
