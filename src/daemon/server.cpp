@@ -125,7 +125,7 @@ bool server::createSocket()
 bool server::bindSocket()
 {
     // first unlink the socket from the previous use
-    unlink(_socketPath.c_str());
+    boost::filesystem::remove(_socketPath.c_str());
     int result = bind(_server_fd, (struct sockaddr*) &_addr, sizeof(_addr));
 
     return result == 0;

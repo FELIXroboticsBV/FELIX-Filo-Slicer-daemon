@@ -27,6 +27,8 @@ add_executable(orca-daemon ${ORCA_DAEMON_SOURCES}
  deps/CLI11.hpp
  utils/parse_cli.hpp
  utils/parse_cli.cpp
+ socket.hpp
+ socket.cpp
  )
 
  target_compile_definitions(orca-daemon PRIVATE

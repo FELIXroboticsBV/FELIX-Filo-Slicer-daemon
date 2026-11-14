@@ -18,9 +18,11 @@
 #include "config.hpp"
 #include "response.hpp"
 #include <boost/filesystem/path.hpp>
+
+#ifndef _WIN32
 #include <sys/socket.h>
 #include <sys/un.h>
-
+#endif
 namespace felix_daemon {
 
 /**
