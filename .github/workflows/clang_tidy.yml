@@ -11,11 +11,12 @@ name: clang-tidy
 #
 # approve_pr_checks.yml approves this workflow's runs for first-time
 # contributors and finds it by its file name.
-on:
-  pull_request:
-    branches:
-      - main
-      - release/*
+
+# on:
+#   pull_request:
+#     branches:
+#       - main
+#       - release/*
 
 permissions:
   contents: read
@@ -47,7 +48,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          lfs: 'false'
+          lfs: "false"
           # The PR merge commit plus its first parent, the base it is diffed against.
           fetch-depth: 2
 

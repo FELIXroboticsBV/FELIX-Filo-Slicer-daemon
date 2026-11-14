@@ -24,6 +24,9 @@ add_executable(orca-daemon ${ORCA_DAEMON_SOURCES}
  utils/sync_filament_self_index.hpp
  utils/sync_filament_self_index.cpp
  orca_request_parameters.cpp
+ deps/CLI11.hpp
+ utils/parse_cli.hpp
+ utils/parse_cli.cpp
  )
 
  target_compile_definitions(orca-daemon PRIVATE
