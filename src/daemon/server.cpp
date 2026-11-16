@@ -10,7 +10,9 @@
 #include "paths.hpp"
 #include "socket.hpp"
 
+#include <boost/filesystem/operations.hpp>
 #include <boost/log/trivial.hpp>
+#include <boost/system/error_code.hpp>
 #include <cstring>
 
 #ifdef _WIN32
@@ -54,8 +56,18 @@ server::server(request_trigger handler) : _socketPath(socket_path()), _request_c
 {
     BOOST_LOG_TRIVIAL(info) << "Staring up daemon`s server";
 
+    if (!m_socket.is_valid()) {
+        BOOST_LOG_TRIVIAL(error) << "Failed to create the socket: " << socket_last_error();
+        return;
+    }
+
+    // remove the socket file left behind by a previous run, otherwise bind() fails with EADDRINUSE
+    boost::system::error_code ec;
+    boost::filesystem::remove(_socketPath, ec);
+
     if (!m_socket.listen_on(_socketPath.string(), cfg.max_pending_connections)) {
-        BOOST_LOG_TRIVIAL(error) << "Failed to set address of the socket because the address is too long !";
+        BOOST_LOG_TRIVIAL(error) << "Failed to listen on socket " << _socketPath.string();
+        return;
     }
 
     _ready = true;

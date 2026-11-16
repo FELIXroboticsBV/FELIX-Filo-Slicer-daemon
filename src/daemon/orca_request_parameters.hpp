@@ -17,6 +17,7 @@
 #include <boost/filesystem.hpp>
 #include <json.hpp>
 #include <libslic3r/Point.hpp>
+#include <optional>
 
 namespace felix_daemon {
 using namespace nlohmann;
@@ -92,6 +93,8 @@ struct Cmd_Parameters
 struct Cmd_Load_Model_Parameters : public Cmd_Parameters
 {
     boost::filesystem::path path;
+    // placement of the first instance, the model is centered around its origin before it is applied
+    std::optional<Slic3r::Transform3d> transform;
 
     void parse(const json& parameters) override;
 };

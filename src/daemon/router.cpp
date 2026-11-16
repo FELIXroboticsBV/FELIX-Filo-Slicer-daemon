@@ -63,6 +63,7 @@ router::router(orca_session& orca_session)
 
         m_commands.emplace("dump_request_cache", [this](const json& p) {
             dump_request_cache(felix_daemon::default_data_directory());
+
             return orca_response();
         });
     }
@@ -223,6 +224,7 @@ void router::dump_request_cache(const boost::filesystem::path& dst)
         BOOST_LOG_TRIVIAL(error) << "Failed to open " << file.string() << " for writing";
         return;
     }
+
     out << nlohmann::json(m_requestQueue).dump(4);
 }
 
