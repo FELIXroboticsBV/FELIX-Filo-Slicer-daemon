@@ -5,6 +5,7 @@
 // Licensed under the GNU Affero General Public License v3.0 or later.
 // See the LICENSE file in the repository root for details.
 
+#include <boost/log/trivial.hpp>
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -136,16 +137,21 @@ bool local_socket::listen_on(const std::string& path, int backlog)
 {
     sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
-    if (path.size() >= sizeof(addr.sun_path))
+    if (path.size() >= sizeof(addr.sun_path)) {
+        BOOST_LOG_TRIVIAL(error) << "Socket path is too long (" << path.size() << " >= " << sizeof(addr.sun_path) << "): " << path;
         return false;
+    }
     std::memcpy(addr.sun_path, path.c_str(), path.size() + 1);
-    // bind the socket
-    bool bindSuccessful = bind(m_fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0;
 
-    // listen on the socket
-    bool listenSuccessful = listen(m_fd, backlog) == 0;
-
-    return bindSuccessful && listenSuccessful;
+    if (bind(m_fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+        BOOST_LOG_TRIVIAL(error) << "Failed to bind the socket: " << socket_last_error();
+        return false;
+    }
+    if (listen(m_fd, backlog) != 0) {
+        BOOST_LOG_TRIVIAL(error) << "Failed to listen on the socket: " << socket_last_error();
+        return false;
+    }
+    return true;
 }
 
 client local_socket::accept_client() const { return client(static_cast<socket_t>(accept(m_fd, nullptr, nullptr))); }
