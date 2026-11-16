@@ -349,11 +349,13 @@ if(FLATPAK)
     # also, yes, this reduces CI by not needing to vendor certain deps
     find_package(ZLIB)
     find_package(PNG)
-    find_package(EXPAT)
-    find_package(CURL)
     find_package(JPEG)
-    find_package(OpenSSL 1.1...<3.2)
-    find_package(CURL)
+    # Not OpenSSL or CURL: the manifest stages the pinned tarballs, and the
+    # Flatpak must run the same OpenSSL build, with the same default security
+    # level, as the other platforms, with a curl linked against it. The GNOME
+    # SDK ships both, and its CURLConfig.cmake finds OpenSSL as a dependency
+    # (find_dependency leaves OPENSSL_FOUND set here), so probing either one
+    # skips dep_OpenSSL and dep_CURL and builds against the SDK's copies.
 endif()
 
 set(ZLIB_PKG "")
@@ -367,10 +369,19 @@ if (NOT PNG_FOUND)
     set(PNG_PKG dep_PNG)
 endif ()
 set(EXPAT_PKG "")
-find_package(EXPAT)
-if (NOT EXPAT_FOUND)
+if (WIN32 OR APPLE)
+    # A system lookup here can resolve an old SDK libexpat without the
+    # entity-amplification guard, so always build the pinned copy.
     include(EXPAT/EXPAT.cmake)
     set(EXPAT_PKG dep_EXPAT)
+else ()
+    # Anything older than the pinned version is built by the EXPAT dep, so every
+    # platform links the same parser.
+    find_package(EXPAT 2.10.0)
+    if (NOT EXPAT_FOUND)
+        include(EXPAT/EXPAT.cmake)
+        set(EXPAT_PKG dep_EXPAT)
+    endif ()
 endif ()
 
 # The order of includes respects the dependencies between libraries
@@ -389,9 +400,14 @@ endif ()
 
 include(TBB/TBB.cmake)
 
-include(Blosc/Blosc.cmake)
-include(OpenEXR/OpenEXR.cmake)
-include(OpenVDB/OpenVDB.cmake)
+# OpenVDB (and Blosc/OpenEXR, which only OpenVDB needs) is used solely by SLA hollowing.
+set(OPENVDB_PKG "")
+if (SLIC3R_OPENVDB)
+    include(Blosc/Blosc.cmake)
+    include(OpenEXR/OpenEXR.cmake)
+    include(OpenVDB/OpenVDB.cmake)
+    set(OPENVDB_PKG dep_OpenVDB)
+endif ()
 
 include(GMP/GMP.cmake)
 include(MPFR/MPFR.cmake)
@@ -403,10 +419,8 @@ include(libnoise/libnoise.cmake)
 
 include(Draco/Draco.cmake)
 
-# I *think* 1.1 is used for *just* md5 hashing?
-# 3.1 has everything in the right place, but the md5 funcs used are deprecated
-# a grep across the repo shows it is used for other things
-# TODO: update openssl and everything that uses <openssl/md5.h>
+# TODO: utils.cpp, Format/bbs_3mf.cpp and GUI/Printer/PrinterFileSystem.cpp
+# still use the MD5_* functions that 3.0 deprecated; port them to EVP.
 set(OPENSSL_PKG "")
 if(NOT OPENSSL_FOUND)
     include(OpenSSL/OpenSSL.cmake)
@@ -478,7 +492,7 @@ set(_dep_list
     dep_Cereal
     dep_Draco
     dep_NLopt
-    dep_OpenVDB
+    ${OPENVDB_PKG}
     ${SLVS_PKG}
     dep_OpenCV
     dep_Eigen
