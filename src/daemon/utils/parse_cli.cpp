@@ -11,6 +11,7 @@
 #include <boost/log/trivial.hpp>
 #include <exception>
 #include "cstdint"
+#include "version.hpp"
 
 namespace felix_daemon::utils {
 
@@ -36,6 +37,8 @@ CLI::App* set_up_cli(char** argv)
 
     app.add_option("--socket-file, --sf", cfg.socketName, "path to the local unix socket used for communication");
     app.add_flag("--allow-request-cache-dump, --arcp", tmp_flags.allow_cache_dump, "allows to use `dump_request_cache` command");
+    app.set_version_flag("--version, -v", DAEMON_VERSION);
+
     argv = app.ensure_utf8(argv);
     return &app;
 }
@@ -49,6 +52,10 @@ int override_config(CLI::App* app, int argc, char** argv)
         app->exit(e);
         return 1;
     } catch (const CLI::CallForAllHelp& e) {
+        app->exit(e);
+        return 1;
+
+    } catch (const CLI::CallForVersion& e) {
         app->exit(e);
         return 1;
     } catch (const CLI::ParseError& e) {

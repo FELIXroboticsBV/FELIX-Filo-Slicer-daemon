@@ -58,6 +58,16 @@ jobs:
         with:
           lfs: "false"
 
+      - name: Read daemon version
+        shell: bash
+        run: |
+          version=$(sed -nE 's/.*DAEMON_VERSION *= *"([^"]+)".*/\1/p' src/daemon/version.hpp)
+          if [ -z "$version" ]; then
+            echo "::error file=src/daemon/version.hpp::DAEMON_VERSION not found"
+            exit 1
+          fi
+          echo "DAEMON_VERSION=$version" >> "$GITHUB_ENV"
+
       # Keyed before anything writes into deps/, since hashFiles covers it.
       - name: Compute deps cache key
         id: deps_key
@@ -150,7 +160,7 @@ jobs:
       - name: Package orca-daemon
         shell: bash
         run: |
-          pkg=orca-daemon_Linux_${{ matrix.arch }}_${GITHUB_SHA::7}
+          pkg=orca-daemon_${DAEMON_VERSION}_Linux_${{ matrix.arch }}_${GITHUB_SHA::7}
           echo "PKG_NAME=$pkg" >> "$GITHUB_ENV"
           mkdir -p "dist/$pkg/bin"
           cp build/src/daemon/orca-daemon "dist/$pkg/bin/"
@@ -177,7 +187,7 @@ jobs:
           size=$(du -h "$PKG_NAME.tar.gz" | cut -f1)
           sha=$(sha256sum "$PKG_NAME.tar.gz" | cut -d' ' -f1)
           {
-            echo "## orca-daemon Linux ${{ matrix.arch }}"
+            echo "## orca-daemon $DAEMON_VERSION Linux ${{ matrix.arch }}"
             echo
             echo "| Package | Size | SHA-256 |"
             echo "| --- | --- | --- |"

@@ -46,6 +46,14 @@ jobs:
         with:
           lfs: "false"
 
+      - name: Read daemon version
+        shell: pwsh
+        run: |
+          $m = Select-String -Path src/daemon/version.hpp -Pattern 'DAEMON_VERSION\s*=\s*"([^"]+)"'
+          if (-not $m) { throw "DAEMON_VERSION not found in src/daemon/version.hpp" }
+          $version = $m.Matches[0].Groups[1].Value
+          "DAEMON_VERSION=$version" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+
       # Keyed before anything writes into deps/, since hashFiles covers it.
       - name: Compute deps cache key
         id: deps_key
@@ -102,7 +110,7 @@ jobs:
       - name: Package orca-daemon
         shell: pwsh
         run: |
-          $pkg = "orca-daemon_Windows_x64_$("${{ github.sha }}".Substring(0, 7))"
+          $pkg = "orca-daemon_$($env:DAEMON_VERSION)_Windows_x64_$("${{ github.sha }}".Substring(0, 7))"
           "PKG_NAME=$pkg" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
           New-Item -ItemType Directory -Force "dist/$pkg" | Out-Null
           $exe = Get-ChildItem build/src/daemon -Recurse -Filter orca-daemon.exe | Select-Object -First 1
