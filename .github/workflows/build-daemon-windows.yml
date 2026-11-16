@@ -20,9 +20,18 @@ on:
       - main
     paths: *build_paths
   workflow_dispatch:
+  # Called by release-daemon.yml, which attaches the package to a release.
+  workflow_call:
+    inputs:
+      release_tag:
+        description: "Tag of the (draft) release to attach the package to"
+        type: string
+        default: ""
 
 concurrency:
-  group: build-daemon-windows-${{ github.event.pull_request.number || github.ref }}
+  # github.workflow is the caller's name when called, so a release build does
+  # not share a group with (and get cancelled by) a branch build on the same ref.
+  group: build-daemon-windows-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -109,8 +118,12 @@ jobs:
       # (GMP, MPFR, OCCT, ...) in build\src\Release.
       - name: Package orca-daemon
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          $pkg = "orca-daemon_$($env:DAEMON_VERSION)_Windows_x64_$("${{ github.sha }}".Substring(0, 7))"
+          $pkg = "orca-daemon_$($env:DAEMON_VERSION)_Windows_x64"
+          # Non-release builds keep the commit hash so builds of one version stay apart.
+          if (-not $env:RELEASE_TAG) { $pkg += "_$("${{ github.sha }}".Substring(0, 7))" }
           "PKG_NAME=$pkg" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
           New-Item -ItemType Directory -Force "dist/$pkg" | Out-Null
           $exe = Get-ChildItem build/src/daemon -Recurse -Filter orca-daemon.exe | Select-Object -First 1
@@ -126,3 +139,14 @@ jobs:
           name: ${{ env.PKG_NAME }}
           path: dist/${{ env.PKG_NAME }}
           if-no-files-found: error
+
+      - name: Attach to release
+        if: inputs.release_tag
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          Compress-Archive -Path "dist/$env:PKG_NAME" -DestinationPath "$env:PKG_NAME.zip"
+          gh release upload "$env:RELEASE_TAG" "$env:PKG_NAME.zip" --clobber

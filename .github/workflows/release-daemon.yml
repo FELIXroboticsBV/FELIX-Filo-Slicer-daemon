@@ -1,0 +1,94 @@
+name: Release orca-daemon
+
+# Builds orca-daemon for Linux and Windows and publishes both packages as a
+# GitHub release tagged daemon-v<DAEMON_VERSION> (src/daemon/version.hpp).
+# The daemon-v prefix keeps these tags apart from the upstream OrcaSlicer v* tags.
+#
+# Trigger either way:
+#   - push a tag:  git tag daemon-v0.1.0 && git push origin daemon-v0.1.0
+#     (the tag must match DAEMON_VERSION)
+#   - Actions tab -> "Release orca-daemon" -> Run workflow (tags the chosen commit)
+#
+# The release stays a draft until both builds have attached their package, so a
+# failed build never leaves a half-filled published release.
+
+on:
+  push:
+    tags:
+      - "daemon-v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-daemon-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write # create the release and upload its assets
+  actions: write  # lets the called builds prune their compiler cache entries
+
+jobs:
+  prepare:
+    name: Create draft release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          lfs: "false"
+
+      - name: Create draft release
+        id: release
+        shell: bash
+        run: |
+          version=$(sed -nE 's/.*DAEMON_VERSION *= *"([^"]+)".*/\1/p' src/daemon/version.hpp)
+          if [ -z "$version" ]; then
+            echo "::error file=src/daemon/version.hpp::DAEMON_VERSION not found"
+            exit 1
+          fi
+          tag="daemon-v$version"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match DAEMON_VERSION $version (expected $tag)"
+            exit 1
+          fi
+          # A leftover draft (e.g. from a re-run) is reused; a published release is not touched.
+          if is_draft=$(gh release view "$tag" --json isDraft -q .isDraft 2>/dev/null); then
+            if [ "$is_draft" != true ]; then
+              echo "::error::Release $tag is already published; bump DAEMON_VERSION in src/daemon/version.hpp"
+              exit 1
+            fi
+            echo "Reusing draft release $tag"
+          else
+            gh release create "$tag" --draft --target "$GITHUB_SHA" \
+              --title "orca-daemon $version" \
+              --notes "orca-daemon $version, built from $GITHUB_SHA."
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  linux:
+    needs: prepare
+    uses: ./.github/workflows/build-daemon-linux.yml
+    with:
+      release_tag: ${{ needs.prepare.outputs.tag }}
+
+  windows:
+    needs: prepare
+    uses: ./.github/workflows/build-daemon-windows.yml
+    with:
+      release_tag: ${{ needs.prepare.outputs.tag }}
+
+  publish:
+    name: Publish release
+    needs: [prepare, linux, windows]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - name: Publish release
+        run: gh release edit "$TAG" --draft=false

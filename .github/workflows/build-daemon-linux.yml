@@ -22,9 +22,18 @@ on:
       - main
     paths: *build_paths
   workflow_dispatch:
+  # Called by release-daemon.yml, which attaches the package to a release.
+  workflow_call:
+    inputs:
+      release_tag:
+        description: "Tag of the (draft) release to attach the package to"
+        type: string
+        default: ""
 
 concurrency:
-  group: build-daemon-linux-${{ github.event.pull_request.number || github.ref }}
+  # github.workflow is the caller's name when called, so a release build does
+  # not share a group with (and get cancelled by) a branch build on the same ref.
+  group: build-daemon-linux-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   # Pushes run to the end, so they always save the caches pull requests restore.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -159,8 +168,12 @@ jobs:
 
       - name: Package orca-daemon
         shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          pkg=orca-daemon_${DAEMON_VERSION}_Linux_${{ matrix.arch }}_${GITHUB_SHA::7}
+          pkg=orca-daemon_${DAEMON_VERSION}_Linux_${{ matrix.arch }}
+          # Non-release builds keep the commit hash so builds of one version stay apart.
+          [ -n "$RELEASE_TAG" ] || pkg+="_${GITHUB_SHA::7}"
           echo "PKG_NAME=$pkg" >> "$GITHUB_ENV"
           mkdir -p "dist/$pkg/bin"
           cp build/src/daemon/orca-daemon "dist/$pkg/bin/"
@@ -198,6 +211,15 @@ jobs:
             echo "./$PKG_NAME/bin/orca-daemon --help"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attach to release
+        if: inputs.release_tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: gh release upload "$RELEASE_TAG" "$PKG_NAME.tar.gz" --clobber
 
       - name: Compiler cache statistics
         if: ${{ always() && steps.ccache.outcome == 'success' }}
