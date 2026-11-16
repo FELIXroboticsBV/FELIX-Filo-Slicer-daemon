@@ -13,17 +13,6 @@
 #include <boost/filesystem/operations.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/system/error_code.hpp>
-#include <cstring>
-
-#ifdef _WIN32
-#include <winsock2.h>
-#include <afunix.h> // AF_UNIX / sockaddr_un on Windows
-// note that this is supported from windows 10 (which should be deprecated by this point)
-#else
-#include <sys/socket.h>
-#include <sys/un.h> // sockaddr_un
-#include <unistd.h> // close, read, unlink
-#endif
 
 #include <csignal>
 
@@ -38,15 +27,21 @@ void onSignal(int) { g_stopRequested = 1; }
 
 void installSignalHandlers()
 {
+#ifdef _WIN32
+    // Windows has no sigaction and no SIGPIPE (Winsock send() reports a closed peer as an error)
+    std::signal(SIGINT, onSignal);  // Ctrl+C
+    std::signal(SIGTERM, onSignal);
+#else
     struct sigaction sa{};
     sa.sa_handler = onSignal;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
+    sa.sa_flags = 0; // no SA_RESTART, so a blocking accept() returns EINTR and the loop can exit
 
     sigaction(SIGINT, &sa, nullptr);  // Ctrl+C
     sigaction(SIGTERM, &sa, nullptr); // kill <pid>
 
     std::signal(SIGPIPE, SIG_IGN);
+#endif
 }
 //===========================================================================
 
