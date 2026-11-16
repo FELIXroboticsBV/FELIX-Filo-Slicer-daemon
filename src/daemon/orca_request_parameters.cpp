@@ -7,6 +7,9 @@ void Cmd_Load_Model_Parameters::parse(const json& parameters)
     path = find_string(parameters, "path");
     if (!boost::filesystem::exists(path))
         throw std::invalid_argument("model not found: " + path.string());
+
+    if (parameters.contains("transform"))
+        transform = find_mat4(parameters, "transform");
 }
 
 void Cmd_Set_Printer_Parameters::parse(const json& parameters)

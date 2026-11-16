@@ -122,8 +122,15 @@ orca_response orca_session::cmd_load_model(const nlohmann::json& parameters)
         nlohmann::json res_body = nlohmann::json::array();
         for (size_t i = 0; i < loaded.objects.size(); ++i) {
             Slic3r::ModelObject* obj = m_plate->add_object(*loaded.objects[i]); // deep copy into the plate
+            // the scene centers every model around its origin, so the instance transforms it sends
+            // are relative to the bounding box center and not to the raw coordinates of the file
+            obj->center_around_origin();
             if (obj->instances.empty())
                 obj->add_instance();
+            if (ctx.transform.has_value()) {
+                obj->instances.front()->set_transformation(Slic3r::Geometry::Transformation(ctx.transform.value()));
+                obj->invalidate_bounding_box();
+            }
 
             m_models[ids[i]] = obj;
 

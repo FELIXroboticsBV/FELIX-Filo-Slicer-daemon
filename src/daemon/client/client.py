@@ -19,6 +19,7 @@ import sys
 import threading
 import math
 import random
+import struct
 from pathlib import Path
 
 DEFAULT_SOCKET = "/run/user/1000/felix-daemon"
@@ -28,21 +29,50 @@ ASSETS = Path(__file__).resolve().parent / "assets"
 MODEL  = str(ASSETS / "dino.stl")
 GCODE  = str(ASSETS / "dino.gcode")
 
-def random_transform(model_key=MODEL, instance=1, lo=20.0, hi=200.0, rotate=False):
-    x = random.uniform(lo, hi)
-    y = random.uniform(lo, hi)
+BED = (235.0, 244.0)  # FELIX Pro 3 printable area
+
+
+def stl_bbox(path):
+    """(min, max) corners of the vertices of a binary or ASCII STL."""
+    data = Path(path).read_bytes()
+    verts = []
+    count = struct.unpack_from("<I", data, 80)[0] if len(data) >= 84 else 0
+    if len(data) == 84 + 50 * count:  # binary: 12 floats + 2 bytes per triangle, skip the normal
+        for i in range(count):
+            f = struct.unpack_from("<12f", data, 84 + 50 * i)
+            verts += [f[3:6], f[6:9], f[9:12]]
+    else:
+        for line in data.decode("utf-8", "replace").splitlines():
+            parts = line.split()
+            if parts[:1] == ["vertex"]:
+                verts.append(tuple(map(float, parts[1:4])))
+    return [min(v[k] for v in verts) for k in range(3)], [max(v[k] for v in verts) for k in range(3)]
+
+
+# the daemon centers the model around its origin, like the scene does, so the matrix places the
+# center of the bounding box: lift it by half of the height to put it on the bed
+BB_MIN, BB_MAX = stl_bbox(MODEL)
+HALF_HEIGHT    = (BB_MAX[2] - BB_MIN[2]) / 2
+RADIUS         = math.hypot(BB_MAX[0] - BB_MIN[0], BB_MAX[1] - BB_MIN[1]) / 2  # stays on the bed when rotated
+
+
+def placement(x, y, angle=0.0):
+    c, s = math.cos(angle), math.sin(angle)
+    return [c, -s, 0, x,
+            s,  c, 0, y,
+            0,  0, 1, HALF_HEIGHT,
+            0,  0, 0, 1]
+
+
+def random_transform(model_key=MODEL, instance=1, rotate=False):
+    x = random.uniform(RADIUS, BED[0] - RADIUS)
+    y = random.uniform(RADIUS, BED[1] - RADIUS)
     a = random.uniform(0, 2 * math.pi) if rotate else 0.0
-    c, s = math.cos(a), math.sin(a)
-    # classic model matrix, notice only x and y components are transformed
-    matrix = [c, -s, 0, x,
-              s,  c, 0, y,
-              0,  0, 1, 0,
-              0,  0, 0, 1]
-    return {"objects": [{"model_key": model_key, "instance_id": instance, "transform": matrix}]}
+    return {"objects": [{"model_key": model_key, "instance_id": instance, "transform": placement(x, y, a)}]}
 
 
 SHORTCUTS = {
-    "load":    ("load_model",  {"path": MODEL}),
+    "load":    ("load_model",  {"path": MODEL, "transform": placement(BED[0] / 2, BED[1] / 2)}),
     "printer": ("set_printer", {"printer_key": "felix_pro_3", "nozzle_size": 0.35}),
     "filament": ("set_filament", {"filament_key": "felix_petg", "nozzle_key": "hardened_steel", "extruder": 0}),
     
@@ -54,8 +84,9 @@ SHORTCUTS = {
 
     "remove_model": ("remove_model" , {"model_key": MODEL}),
     "remove_instance":("remove_instance" , {"model_key":MODEL, "instance_id": 0}),
-    
-    "move":        ("set_transform", random_transform),
+
+    "move": ("set_transform", lambda: random_transform(instance=0,rotate=True)),
+    "move_instance": ("set_transform", lambda: random_transform(instance=1)),
     "move_rotate": ("set_transform", lambda: random_transform(rotate=True)),
 
     "add_instance" : ("add_instance", {"model_key": MODEL}),
@@ -63,6 +94,7 @@ SHORTCUTS = {
     "slice":   ("slice",       {"modelPath": MODEL, "outputPath": GCODE}),
     "status":  ("slice_status",  {}),
     "info": ("get_state", {}),
+
 
 
 }
